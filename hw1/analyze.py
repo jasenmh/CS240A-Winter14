@@ -18,6 +18,7 @@ for algo in range(1, 8):
             multtime = float(re.search('Time \= (.*) sec, .*', o).group(1))
             f.write(str(multtime) + " ")
             print('\t\trun time ' + str(multtime))
+            matdim = matdim << 1
 
         f.write('\n')
 

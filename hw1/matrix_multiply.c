@@ -143,8 +143,8 @@ int matrix_multiply_run_7(matrix_t *A, matrix_t *B, matrix_t *C)
 {
   int i, j, k;
   for (k = 0; k < A->rows; k++) {
-    for (i = 0; i < B->cols; i++) {
-      for (j = 0; j < A->cols; j++) {
+    for (j = 0; j < B->cols; j++) {
+      for (i = 0; i < A->cols; i++) {
         element(C,i,j) += element(A,i,k) * element(B,k,j);
       }
     }

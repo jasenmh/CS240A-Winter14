@@ -39,6 +39,9 @@ for algo in range(1, 8):
           matdim = matdim << 1
 
         f.write('\n')
+        f.flush()
 
 if DEBUG:
   print('\nAnalysis complete.')
+
+f.close()

@@ -78,10 +78,47 @@ int main( int argc, char* argv[] ) {
  *
  */
 
-double * gsolve(int n)
+double *cgsolve(int n)
 {
   int niters = 0;   // number of iterations
-  
+  int possmax = 5*sqrt(n);  // possible max. iterations
+  int MAXITERS = (1000 > possmax) ? 1000 : possmax;
+  double TARGRES = 1.0e-6;  // target residual
+  double relres;  // relative residual
+  double x[n];
+  double b[n];
+  double r[n];
+  double d[n];  // direction
+  double Ad[n]
+  double alpha, beta;
+  double rtr;
+  double rtrold;
+  double normb;
+  int i;
+
+  for(i = 0; i < n; ++i)
+  {
+    x[i] = 0;
+    b[i] = r[i] = d[i] = getb(i);
+  }
+ 
+  rtr = ddot(r, r);
+  normb = sqrt(ddot(b, b));
+  relres = 1;
+
+  while(relres < TARGRES && niter < MAXITERS)
+  {
+    ++niters;
+    Ad = matvec(d, n);
+    alpha = rtr / ddot(d, Ad);
+    x = daxpy(x, d, alpha, n);
+    r = daxpy(r, Ad, -alpha, n);
+    rtrold = rtr;
+    rtr = ddot(r, r);
+    beta = rtr / rtrold;
+    relres = sqrt(rtr) / normb;
+  }
+
 }
 
 

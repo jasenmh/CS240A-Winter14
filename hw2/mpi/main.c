@@ -14,7 +14,7 @@
 double* load_vec( char* filename, int* k );
 void save_vec( int k, double* x );
 double *cgsolve(int n);
-double *ddot();
+double ddot(double *v, double *w, int n);
 double *daxpy();
 double *matvec();
 
@@ -119,6 +119,19 @@ double *cgsolve(int n)
     relres = sqrt(rtr) / normb;
   }
 
+}
+
+double ddot(double *v, double *w, int n)
+{
+  double prod = 0;
+  int i;
+
+  for(i = 0; i < n; ++i)
+  {
+    p += v[i] * w[i];
+  }
+
+  return p;
 }
 
 

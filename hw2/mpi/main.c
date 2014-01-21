@@ -85,7 +85,7 @@ double *cgsolve(int n)
   int MAXITERS = (1000 > possmax) ? 1000 : possmax;
   double TARGRES = 1.0e-6;  // target residual
   double relres;  // relative residual
-  double x[n];  // vector that we are solving for
+  double *x;  // vector that we are solving for
   double b[n];
   double r[n];
   double d[n];  // direction
@@ -95,6 +95,8 @@ double *cgsolve(int n)
   double rtrold;
   double normb;
   int i;
+
+  x = (double *)malloc(sizeof(double) * n);
 
   for(i = 0; i < n; ++i)
   {
@@ -110,16 +112,17 @@ double *cgsolve(int n)
   {
     ++niters;
     matvec(Ad, d, n);
-    alpha = rtr / ddot(d, Ad);
+    alpha = rtr / ddot(d, Ad, n);
     x = daxpy(x, d, 1, alpha, n);
     r = daxpy(r, Ad, 1, -alpha, n);
     rtrold = rtr;
-    rtr = ddot(r, r);
+    rtr = ddot(r, r, n);
     beta = rtr / rtrold;
     d = daxpy(r, d, 1, beta, n);
     relres = sqrt(rtr) / normb;
   }
 
+  return x;
 }
 
 double ddot(double *v, double *w, int n)

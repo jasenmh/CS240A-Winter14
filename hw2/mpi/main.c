@@ -16,7 +16,7 @@ void save_vec( int k, double* x );
 double *cgsolve(int n);
 double ddot(double *v, double *w, int n);
 double *daxpy();
-double *matvec();
+void matvec(double *v, const double *w, int n);
 
 int main( int argc, char* argv[] ) {
 	int writeOutX = 0;
@@ -109,7 +109,7 @@ double *cgsolve(int n)
   while(relres < TARGRES && niter < MAXITERS)
   {
     ++niters;
-    Ad = matvec(d, n);
+    matvec(Ad, d, n);
     alpha = rtr / ddot(d, Ad);
     x = daxpy(x, d, alpha, n);
     r = daxpy(r, Ad, -alpha, n);
@@ -134,6 +134,38 @@ double ddot(double *v, double *w, int n)
   return p;
 }
 
+void matvec(double *v, const double *w, int n)
+{
+  int k = sqrt(n);
+  int i;
+  int r, s;   //row, column
+
+/* id don't think i need to init this
+  for(i = 0; i < n; ++i)
+  {
+    v[i] = 0.0;
+  }
+*/
+
+  for(r = 0; r < k; ++r)
+  {
+    for(s = 0; s < k; ++s)
+    {
+      i = ((r - 1) * k) + s;
+      v[i] = 4 * w[i];
+
+      if(r != 1)
+        v[i] -= w[i-k];
+      if(s != 1)
+        v[i] -= w[i-1];
+      if(s != k)
+        v[i] -= w[i+1];
+      if(r != k)
+        v[i] -= w[i+k];
+    }
+  }
+
+}
 
 /*
  * Supporting Functions

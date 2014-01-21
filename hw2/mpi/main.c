@@ -13,7 +13,7 @@
 
 double* load_vec( char* filename, int* k );
 void save_vec( int k, double* x );
-double *cgsolve(int n);
+double *cgsolve(int *i, double *norm, int n);
 double ddot(double *v, double *w, int n);
 void matvec(double *v, const double *w, int n);
 void daxpy(double *v, const double *w, double alpha, double beta, int n);
@@ -27,7 +27,8 @@ int main( int argc, char* argv[] ) {
 	double* x;
 	double time;
 	double t1, t2;
-	
+	int correct;
+
 	MPI_Init( &argc, &argv );
 	
 	// Read command line args.
@@ -51,6 +52,9 @@ int main( int argc, char* argv[] ) {
 	t1 = MPI_Wtime();
 	
 	// CG Solve here!
+printf("\t calling cgsolve\n");
+	x = cgsolve(&iterations, &norm, n);
+printf("\t returned from cgsolve\n");
 	
 	// End Timer
 	t2 = MPI_Wtime();
@@ -63,12 +67,19 @@ int main( int argc, char* argv[] ) {
 	printf( "Problem size (k): %d\n",k);
 	printf( "Norm of the residual after %d iterations: %lf\n",iterations,norm);
 	printf( "Elapsed time during CGSOLVE: %lf\n", t1-t2);
+
+	correct = cs240_verify(x, k, t1-t2);
+
+	printf("Correct: %d\n", correct);
 	
 	// Deallocate 
-	free(b);
+printf("\t freeing memory\n");
+	//free(b);
 	free(x);
+printf("\t freed memory\n");
 	
 	MPI_Finalize();
+printf("\tMPI finalized\n");
 	
 	return 0;
 }
@@ -78,7 +89,7 @@ int main( int argc, char* argv[] ) {
  *
  */
 
-double *cgsolve(int n)
+double *cgsolve(int *iter, double *norm, int n)
 {
   int niters = 0;   // number of iterations
   int possmax = 5*sqrt(n);  // possible max. iterations
@@ -121,6 +132,10 @@ double *cgsolve(int n)
     daxpy(d, r, beta, 1, n);
     relres = sqrt(rtr) / normb;
   }
+
+  // returning values to be printed after a run
+  *iter = niters;
+  *norm = relres;
 
   return x;
 }

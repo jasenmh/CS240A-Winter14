@@ -110,15 +110,17 @@ double *cgsolve(int n)
   {
     ++niters;
     matvec(Ad, d, n);
-    alpha = rtr / ddot(d, Ad);
+    alpha = rtr / ddot(d, Ad, n);
     x = daxpy(x, d, 1, alpha, n);
     r = daxpy(r, Ad, 1, -alpha, n);
     rtrold = rtr;
-    rtr = ddot(r, r);
+    rtr = ddot(r, r, n);
     beta = rtr / rtrold;
     d = daxpy(r, d, 1, beta, n);
     relres = sqrt(rtr) / normb;
   }
+
+  return x;
 
 }
 

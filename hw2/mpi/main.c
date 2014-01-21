@@ -15,8 +15,8 @@ double* load_vec( char* filename, int* k );
 void save_vec( int k, double* x );
 double *cgsolve(int n);
 double ddot(double *v, double *w, int n);
-double *daxpy();
 void matvec(double *v, const double *w, int n);
+void daxpy(double *v, const double *w, double alpha, double beta, int n);
 
 int main( int argc, char* argv[] ) {
 	int writeOutX = 0;
@@ -85,7 +85,7 @@ double *cgsolve(int n)
   int MAXITERS = (1000 > possmax) ? 1000 : possmax;
   double TARGRES = 1.0e-6;  // target residual
   double relres;  // relative residual
-  double x[n];
+  double x[n];  // vector that we are solving for
   double b[n];
   double r[n];
   double d[n];  // direction
@@ -111,11 +111,12 @@ double *cgsolve(int n)
     ++niters;
     matvec(Ad, d, n);
     alpha = rtr / ddot(d, Ad);
-    x = daxpy(x, d, alpha, n);
-    r = daxpy(r, Ad, -alpha, n);
+    x = daxpy(x, d, 1, alpha, n);
+    r = daxpy(r, Ad, 1, -alpha, n);
     rtrold = rtr;
     rtr = ddot(r, r);
     beta = rtr / rtrold;
+    d = daxpy(r, d, 1, beta, n);
     relres = sqrt(rtr) / normb;
   }
 
@@ -166,6 +167,23 @@ void matvec(double *v, const double *w, int n)
   }
 
 }
+
+// Overwrites vector v with scalar1*v + scalar2*w
+void daxpy(double *v, const double *w, double scalar1, double scalar2, int n)
+{
+
+  /* To parallelize - broadcast the scalars scalar1 and scalar2,
+   * then split up the loop computation for the portions of v and w 
+   * that you need, and combine the result at the end.
+   */
+
+  int i;
+  for(i = 0; i < n; i++)
+  {
+    v[i] = v[i]*scalar1 + w[i]*scalar2;
+  }
+}
+
 
 /*
  * Supporting Functions

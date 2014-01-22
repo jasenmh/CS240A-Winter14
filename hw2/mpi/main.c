@@ -11,6 +11,8 @@
 #include <stdlib.h>
 #include <math.h>
 
+#define DEBUG 1
+
 double* load_vec( char* filename, int* k );
 void save_vec( int k, double* x );
 double *cgsolve(int *i, double *norm, int n);
@@ -47,6 +49,23 @@ int main( int argc, char* argv[] ) {
 	}
 	writeOutX = atoi( argv[argc-1] ); // Write X to file if true, do not write if unspecified.
 
+	// some tests of basic functionality
+#if DEBUG == 1
+	double ta[3] = {1.0, 1.0, 1.0};
+	double tb[3] = {0.0, 0.0, 1.0};
+	double tc = 1.0;
+	double td = 2.0;
+	double tz;
+
+	tz = ddot(ta, tb, 3);
+	printf("test: ddot is %f\n", tz);
+	daxpy(ta, tb, tc, td, 3);
+	printf("test: daxpy is (%f, %f, %f)\n", ta[0], ta[1], ta[2]);
+	matvec(ta, tb, 3);
+	printf("test: matvec is (%f, %f, %f)\n", ta[0], ta[1], ta[2]);
+
+	return 0;
+#endif
 	
 	// Start Timer
 	t1 = MPI_Wtime();

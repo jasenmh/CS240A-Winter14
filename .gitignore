@@ -1,3 +1,6 @@
 *.o
 matrix_multiply
 *.csv
+hello_mpi
+cgsolve
+xApprox.txt

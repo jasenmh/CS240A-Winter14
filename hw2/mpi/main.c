@@ -11,11 +11,11 @@
 #include <stdlib.h>
 #include <math.h>
 
-#define DEBUG 1
+#define DEBUG 0
 
 double* load_vec( char* filename, int* k );
 void save_vec( int k, double* x );
-double *cgsolve(int *i, double *norm, int n);
+double *cgsolve(double *x, int* i, double* norm, int n);
 double ddot(double *v, double *w, int n);
 void matvec(double *v, const double *w, int n);
 void daxpy(double *v, const double *w, double alpha, double beta, int n);
@@ -23,7 +23,8 @@ void daxpy(double *v, const double *w, double alpha, double beta, int n);
 int main( int argc, char* argv[] ) {
 	int writeOutX = 0;
 	int n, k;
-	int iterations = 1000;
+	int maxiterations = 1000;
+	int niters = 0;
 	double norm;
 	double* b;
 	double* x;
@@ -51,19 +52,28 @@ int main( int argc, char* argv[] ) {
 
 	// some tests of basic functionality
 #if DEBUG == 1
+
 	double ta[3] = {1.0, 1.0, 1.0};
 	double tb[3] = {0.0, 0.0, 1.0};
 	double tc = 1.0;
 	double td = 2.0;
+	double te;
 	double tz;
+	int i;
 
 	tz = ddot(ta, tb, 3);
 	printf("test: ddot is %f\n", tz);
 	daxpy(ta, tb, tc, td, 3);
 	printf("test: daxpy is (%f, %f, %f)\n", ta[0], ta[1], ta[2]);
+	for(i = 0; i < 3; ++i)
+	{
+	  te = cs240_getB(i, 3);
+	  printf("b(%d) = %f\n", i, te);
+	}
 	matvec(ta, tb, 3);
 	printf("test: matvec is (%f, %f, %f)\n", ta[0], ta[1], ta[2]);
 
+	MPI_Finalize();
 	return 0;
 #endif
 	
@@ -71,9 +81,9 @@ int main( int argc, char* argv[] ) {
 	t1 = MPI_Wtime();
 	
 	// CG Solve here!
-printf("\t calling cgsolve\n");
-	x = cgsolve(&iterations, &norm, n);
-printf("\t returned from cgsolve\n");
+	double x_initial[n];
+	x = x_initial;
+	cgsolve(x, &niters, &norm, n);
 	
 	// End Timer
 	t2 = MPI_Wtime();
@@ -84,21 +94,24 @@ printf("\t returned from cgsolve\n");
 		
 	// Output
 	printf( "Problem size (k): %d\n",k);
-	printf( "Norm of the residual after %d iterations: %lf\n",iterations,norm);
-	printf( "Elapsed time during CGSOLVE: %lf\n", t1-t2);
+	if(niters > 0) {
+	  printf( "Norm of the residual after %d iterations: %lf\n", niters, norm);
+	}
+	printf( "Elapsed time during CGSOLVE: %lf\n", t2-t1);
 
-	correct = cs240_verify(x, k, t1-t2);
+	correct = cs240_verify(x, k, t2-t1);
 
 	printf("Correct: %d\n", correct);
 	
 	// Deallocate 
-printf("\t freeing memory\n");
-	//free(b);
-	free(x);
-printf("\t freed memory\n");
+	
+	// if(niters > 0)
+	//   free(b);
+
+	if(niters > 0)
+	  free(x);
 	
 	MPI_Finalize();
-printf("\tMPI finalized\n");
 	
 	return 0;
 }
@@ -108,14 +121,14 @@ printf("\tMPI finalized\n");
  *
  */
 
-double *cgsolve(int *iter, double *norm, int n)
+double *cgsolve(double *x, int *iter, double *norm, int n)
 {
   int niters = 0;   // number of iterations
   int possmax = 5*sqrt(n);  // possible max. iterations
   int MAXITERS = (1000 > possmax) ? 1000 : possmax;
   double TARGRES = 1.0e-6;  // target residual
   double relres;  // relative residual
-  double *x;  // vector that we are solving for
+  //double *x;  // vector that we are solving for
   double b[n];
   double r[n];
   double d[n];  // direction
@@ -126,7 +139,7 @@ double *cgsolve(int *iter, double *norm, int n)
   double normb;
   int i;
 
-  x = (double *)malloc(sizeof(double) * n);
+  //x = (double *)malloc(sizeof(double) * n);
 
   for(i = 0; i < n; ++i)
   {
@@ -134,11 +147,11 @@ double *cgsolve(int *iter, double *norm, int n)
     b[i] = r[i] = d[i] = cs240_getB(i, n);
   }
  
-  rtr = ddot(r, r, n);
   normb = sqrt(ddot(b, b, n));
-  relres = 1;
+  rtr = ddot(r, r, n);
+  relres = 1.0;
 
-  while(relres < TARGRES && niters < MAXITERS)
+  while(relres > TARGRES && niters < MAXITERS)
   {
     ++niters;
     matvec(Ad, d, n);
@@ -152,6 +165,8 @@ double *cgsolve(int *iter, double *norm, int n)
     relres = sqrt(rtr) / normb;
   }
 
+  printf("niters is %d\n", niters);
+
   // returning values to be printed after a run
   *iter = niters;
   *norm = relres;
@@ -161,7 +176,7 @@ double *cgsolve(int *iter, double *norm, int n)
 
 double ddot(double *v, double *w, int n)
 {
-  double prod = 0;
+  double prod = 0.0;
   int i;
 
   for(i = 0; i < n; ++i)
@@ -170,39 +185,6 @@ double ddot(double *v, double *w, int n)
   }
 
   return prod;
-}
-
-void matvec(double *v, const double *w, int n)
-{
-  int k = sqrt(n);
-  int i;
-  int r, s;   //row, column
-
-/* id don't think i need to init this
-  for(i = 0; i < n; ++i)
-  {
-    v[i] = 0.0;
-  }
-*/
-
-  for(r = 0; r < k; ++r)
-  {
-    for(s = 0; s < k; ++s)
-    {
-      i = ((r - 1) * k) + s;
-      v[i] = 4 * w[i];
-
-      if(r != 1)
-        v[i] -= w[i-k];
-      if(s != 1)
-        v[i] -= w[i-1];
-      if(s != k)
-        v[i] -= w[i+1];
-      if(r != k)
-        v[i] -= w[i+k];
-    }
-  }
-
 }
 
 // Overwrites vector v with scalar1*v + scalar2*w
@@ -219,6 +201,37 @@ void daxpy(double *v, const double *w, double scalar1, double scalar2, int n)
   {
     v[i] = v[i]*scalar1 + w[i]*scalar2;
   }
+}
+
+void matvec(double *v, const double *w, int n)
+{
+  int k = (int)sqrt(n);
+  int i;
+  int r, s;   //row, column
+
+  for(i = 0; i < n; ++i)
+  {
+    v[i] = 0.0;
+  }
+
+  for(r = 0; r < k; ++r)
+  {
+    for(s = 0; s < k; ++s)
+    {
+      i = (r * k) + s;
+      v[i] = 4 * w[i];
+
+      if(r != 0)
+        v[i] -= w[i-k];
+      if(s != 0)
+        v[i] -= w[i-1];
+      if(s != k-1)
+        v[i] -= w[i+1];
+      if(r != k-1)
+        v[i] -= w[i+k];
+    }
+  }
+
 }
 
 

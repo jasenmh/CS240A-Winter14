@@ -129,7 +129,6 @@ double *cgsolve(double *x, int *iter, double *norm, int n)
   double TARGRES = 1.0e-6;  // target residual
   double relres;  // relative residual
   //double *x;  // vector that we are solving for
-  double b[n];
   double r[n];
   double d[n];  // direction
   double Ad[n];
@@ -145,10 +144,10 @@ double *cgsolve(double *x, int *iter, double *norm, int n)
   for(i = 0; i < n; ++i)
   {
     x[i] = 0;
-    b[i] = r[i] = d[i] = cs240_getB(i, n);
+    r[i] = d[i] = cs240_getB(i, n);
   }
  
-  normb = sqrt(ddot(b, b, n));
+  normb = sqrt(ddot(r, r, n));
   rtr = ddot(r, r, n);
   relres = 1.0;
 

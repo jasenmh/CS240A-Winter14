@@ -137,9 +137,10 @@ double *cgsolve(double *x, int *iter, double *norm, int n)
   double rtr;
   double rtrold;
   double normb;
-  int i;
+  int i, rank, nprocs;
 
-  //x = (double *)malloc(sizeof(double) * n);
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
 
   for(i = 0; i < n; ++i)
   {

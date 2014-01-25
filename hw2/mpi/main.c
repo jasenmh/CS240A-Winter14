@@ -222,11 +222,19 @@ void matvec(double *v, const double *w, int n)
   int k = (int)sqrt(n);
   int i;
   int r, s;   //row, column
+  double *subset_w;
+  int nperproc = n/nprocs;
 
+/*
   for(i = 0; i < n; ++i)
   {
     v[i] = 0.0;
   }
+*/
+  subset_w = (double *)malloc(sizeof(double) * (nperproc));
+
+  MPI_Scatter(w, nperproc, MPI_DOUBLE, subset_w, nperproc, MPI_DOUBLE,
+    0, MPI_COMM_WORLD);
 
   for(r = 0; r < k; ++r)
   {

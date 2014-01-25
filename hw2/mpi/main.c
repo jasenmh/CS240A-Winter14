@@ -20,6 +20,8 @@ double ddot(double *v, double *w, int n);
 void matvec(double *v, const double *w, int n);
 void daxpy(double *v, const double *w, double alpha, double beta, int n);
 
+int rank, nprocs;
+
 int main( int argc, char* argv[] ) {
 	int writeOutX = 0;
 	int n, k;
@@ -77,12 +79,16 @@ int main( int argc, char* argv[] ) {
 	return 0;
 #endif
 	
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
+
 	// Start Timer
 	t1 = MPI_Wtime();
 	
 	// CG Solve here!
-	double x_initial[n];
-	x = x_initial;
+	//double x_initial[n];
+	double *x;
+	//x = x_initial;
 	cgsolve(x, &niters, &norm, n);
 	
 	// End Timer
@@ -108,7 +114,7 @@ int main( int argc, char* argv[] ) {
 	// if(niters > 0)
 	//   free(b);
 
-	if(niters > 0)
+	if(rank == 0 && niters > 0)
 	  free(x);
 	
 	MPI_Finalize();
@@ -129,7 +135,6 @@ double *cgsolve(double *x, int *iter, double *norm, int n)
   double TARGRES = 1.0e-6;  // target residual
   double relres;  // relative residual
   //double *x;  // vector that we are solving for
-  double b[n];
   double r[n];
   double d[n];  // direction
   double Ad[n];
@@ -137,18 +142,26 @@ double *cgsolve(double *x, int *iter, double *norm, int n)
   double rtr;
   double rtrold;
   double normb;
-  int i, rank, nprocs;
+  int i;
+  int numrows;
 
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
-
-  for(i = 0; i < n; ++i)
+  if(rank == 0)
   {
-    x[i] = 0;
-    b[i] = r[i] = d[i] = cs240_getB(i, n);
+    x = (double *)malloc(sizeof(int) * n);
+    for(i = 0; i < n; ++i)
+    {
+      x[i] = 0.0;
+    }
+  }
+
+  numrows = n/nprocs;
+
+  for(i = 0; i < numrows; ++i)
+  {
+    r[i] = d[i] = cs240_getB(i + rank*numrows, n);
   }
  
-  normb = sqrt(ddot(b, b, n));
+  normb = sqrt(ddot(r, r, n));
   rtr = ddot(r, r, n);
   relres = 1.0;
 

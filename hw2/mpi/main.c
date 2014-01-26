@@ -11,13 +11,13 @@
 #include <stdlib.h>
 #include <math.h>
 
-#define DEBUG 0
+#define DEBUG 1
 
 double* load_vec( char* filename, int* k );
 void save_vec( int k, double* x );
 double *cgsolve(double *x, int* i, double* norm, int n);
 double ddot(double *v, double *w, int n);
-void matvec(double *v, const double *w, int n);
+void matvec(double *v, double *w, int n);
 void daxpy(double *v, const double *w, double alpha, double beta, int n);
 
 int rank, nprocs;
@@ -29,7 +29,6 @@ int main( int argc, char* argv[] ) {
 	int niters = 0;
 	double norm;
 	double* b;
-	double* x;
 	double time;
 	double t1, t2;
 	int correct;
@@ -52,33 +51,6 @@ int main( int argc, char* argv[] ) {
 	}
 	writeOutX = atoi( argv[argc-1] ); // Write X to file if true, do not write if unspecified.
 
-	// some tests of basic functionality
-#if DEBUG == 1
-
-	double ta[3] = {1.0, 1.0, 1.0};
-	double tb[3] = {0.0, 0.0, 1.0};
-	double tc = 1.0;
-	double td = 2.0;
-	double te;
-	double tz;
-	int i;
-
-	tz = ddot(ta, tb, 3);
-	printf("test: ddot is %f\n", tz);
-	daxpy(ta, tb, tc, td, 3);
-	printf("test: daxpy is (%f, %f, %f)\n", ta[0], ta[1], ta[2]);
-	for(i = 0; i < 3; ++i)
-	{
-	  te = cs240_getB(i, 3);
-	  printf("b(%d) = %f\n", i, te);
-	}
-	matvec(ta, tb, 3);
-	printf("test: matvec is (%f, %f, %f)\n", ta[0], ta[1], ta[2]);
-
-	MPI_Finalize();
-	return 0;
-#endif
-	
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
 
@@ -87,10 +59,11 @@ int main( int argc, char* argv[] ) {
 	
 	// CG Solve here!
 	//double x_initial[n];
-	double *x;
+	double *x=NULL;
 	//x = x_initial;
-	cgsolve(x, &niters, &norm, n);
-	
+if(DEBUG) printf("-calling cgsolve\n");
+	x = cgsolve(x, &niters, &norm, n);
+if(DEBUG) printf("-exited cgsolve\n");	
 	// End Timer
 	t2 = MPI_Wtime();
 	
@@ -105,7 +78,13 @@ int main( int argc, char* argv[] ) {
 	}
 	printf( "Elapsed time during CGSOLVE: %lf\n", t2-t1);
 
-	correct = cs240_verify(x, k, t2-t1);
+  if(rank == 0)
+    if(x == NULL)
+      printf("-x == NULL\n");
+    else
+	    correct = cs240_verify(x, k, t2-t1);
+  else
+    printf("-only rank 0 verifies\n");
 
 	printf("Correct: %d\n", correct);
 	
@@ -145,9 +124,10 @@ double *cgsolve(double *x, int *iter, double *norm, int n)
   int i;
   int numrows;
 
+if(DEBUG) printf("-started cgsolve\n");
   if(rank == 0)
   {
-    x = (double *)malloc(sizeof(int) * n);
+    x = (double *)malloc(sizeof(double) * n);
     for(i = 0; i < n; ++i)
     {
       x[i] = 0.0;
@@ -156,6 +136,7 @@ double *cgsolve(double *x, int *iter, double *norm, int n)
 
   numrows = n/nprocs;
 
+if(DEBUG) printf("-initing arrays\n");
   for(i = 0; i < numrows; ++i)
   {
     r[i] = d[i] = cs240_getB(i + rank*numrows, n);
@@ -165,10 +146,12 @@ double *cgsolve(double *x, int *iter, double *norm, int n)
   rtr = ddot(r, r, n);
   relres = 1.0;
 
+if(DEBUG) printf("-starting main loop\n");
   while(relres > TARGRES && niters < MAXITERS)
   {
     ++niters;
     matvec(Ad, d, n);
+if(DEBUG) printf("-left matvec\n");
     alpha = rtr / ddot(d, Ad, n);
     daxpy(x, d, 1, alpha, n);
     daxpy(r, Ad, 1, -alpha, n);
@@ -179,7 +162,7 @@ double *cgsolve(double *x, int *iter, double *norm, int n)
     relres = sqrt(rtr) / normb;
   }
 
-  printf("niters is %d\n", niters);
+if(DEBUG) printf("niters is %d\n", niters);
 
   // returning values to be printed after a run
   *iter = niters;
@@ -217,13 +200,14 @@ void daxpy(double *v, const double *w, double scalar1, double scalar2, int n)
   }
 }
 
-void matvec(double *v, const double *w, int n)
+void matvec(double *v, double *w, int n)
 {
   int k = (int)sqrt(n);
   int i;
   int r, s;   //row, column
-  double *subset_w;
+  double *subset_w, *subset_v;
   int nperproc = n/nprocs;
+  int kperproc = k/nprocs;
 
 /*
   for(i = 0; i < n; ++i)
@@ -231,28 +215,45 @@ void matvec(double *v, const double *w, int n)
     v[i] = 0.0;
   }
 */
-  subset_w = (double *)malloc(sizeof(double) * (nperproc));
-
-  MPI_Scatter(w, nperproc, MPI_DOUBLE, subset_w, nperproc, MPI_DOUBLE,
+  // arrays are 2k larger than we need to accomodate ghost cells from
+  // neighbors
+if(DEBUG) printf("-initing subsets\n");
+  subset_w = (double *)malloc(sizeof(double) * (nperproc + 2*k));
+  subset_v = (double *)malloc(sizeof(double) * (nperproc + 2*k));
+if(DEBUG) printf("-size of subset arrays is %d\n", nperproc + 2*k);
+  //double subset_v[4224];
+  //double subset_w[4224];
+if(DEBUG) printf("-initing ghost cells\n");
+  // get ghost cells
+  for(i = 0; i < k; ++i)
+    subset_w[i] = 0.0;
+  for(i = k*(kperproc+1); i < k*(kperproc+1) + k; ++i)
+    subset_w[i] = 0.0;
+if(DEBUG) printf("-scattering\n");
+  // subset_w offset by k to give space for neighbor ghost cells
+  MPI_Scatter(w, nperproc, MPI_DOUBLE, subset_w+k, nperproc, MPI_DOUBLE,
     0, MPI_COMM_WORLD);
-
-  for(r = 0; r < k; ++r)
+if(DEBUG) printf("-matvec looping\n");
+  for(r = 1; r < kperproc + 1; ++r)
   {
     for(s = 0; s < k; ++s)
     {
       i = (r * k) + s;
-      v[i] = 4 * w[i];
+      subset_v[i] = 4 * subset_w[i];
 
       if(r != 0)
-        v[i] -= w[i-k];
+        subset_v[i] -= subset_w[i-k];
       if(s != 0)
-        v[i] -= w[i-1];
+        subset_v[i] -= subset_w[i-1];
       if(s != k-1)
-        v[i] -= w[i+1];
+        subset_v[i] -= subset_w[i+1];
       if(r != k-1)
-        v[i] -= w[i+k];
+        subset_v[i] -= subset_w[i+k];
     }
   }
+if(DEBUG) printf("-gather\n");
+  MPI_Gather(subset_v+k, nperproc, MPI_DOUBLE, v, nperproc, MPI_DOUBLE, 0,
+    MPI_COMM_WORLD);
 
 }
 

@@ -240,12 +240,12 @@ if(DEBUG) printf("-scattering\n");
 
 if(DEBUG) printf("-initing ghost cells\n");
   // get ghost cells
-  if(rank % 2 == 0) // even processors send then recv to up neighbor
+  if(rank % 2 == 0) // even processors send up then recv from up neighbor
   {
     MPI_Send(subset_w+k, k, MPI_DOUBLE, rank-1, 1, MPI_COMM_WORLD);
     MPI_Recv(subset_w, k, MPI_DOUBLE, rank-1, 2, MPI_COMM_WORLD, &status);
   }
-  else              // odd processors recv then send to down neighbor
+  else              // odd processors recv from then send to down neighbor
   {
     MPI_Recv(subset_w+(k*(kperproc+1)), k, MPI_DOUBLE, rank+1, 1, 
       MPI_COMM_WORLD, &status);
@@ -253,14 +253,14 @@ if(DEBUG) printf("-initing ghost cells\n");
       MPI_COMM_WORLD);
   }
 
-  if(rank % 2 == 0) // even proc send then recv to down neighbor
+  if(rank % 2 == 0) // even proc send to then recv from down neighbor
   {
     MPI_Send(subset_w+(k*kperproc), k, MPI_DOUBLE, rank+1, 3, 
       MPI_COMM_WORLD);
     MPI_Recv(subset_w+(k*(kperproc+1)), k, MPI_DOUBLE, rank+1, 4, 
       MPI_COMM_WORLD, &status);
   }
-  else              // odd proc recv then send to up neighbor
+  else              // odd proc recv from then send to up neighbor
   {
     MPI_Recv(subset_w, k, MPI_DOUBLE, rank-1, 3, MPI_COMM_WORLD, &status);
     MPI_Send(subset_w+k, k, MPI_DOUBLE, rank-1, 4, MPI_COMM_WORLD);

@@ -208,6 +208,7 @@ void matvec(double *v, double *w, int n)
   double *subset_w, *subset_v;
   int nperproc = n/nprocs;
   int kperproc = k/nprocs;
+  MPI_Status status;
 
 /*
   for(i = 0; i < n; ++i)
@@ -220,19 +221,51 @@ void matvec(double *v, double *w, int n)
 if(DEBUG) printf("-initing subsets\n");
   subset_w = (double *)malloc(sizeof(double) * (nperproc + 2*k));
   subset_v = (double *)malloc(sizeof(double) * (nperproc + 2*k));
+
 if(DEBUG) printf("-size of subset arrays is %d\n", nperproc + 2*k);
   //double subset_v[4224];
   //double subset_w[4224];
-if(DEBUG) printf("-initing ghost cells\n");
-  // get ghost cells
+
+/*
   for(i = 0; i < k; ++i)
     subset_w[i] = 0.0;
   for(i = k*(kperproc+1); i < k*(kperproc+1) + k; ++i)
     subset_w[i] = 0.0;
+*/
+
 if(DEBUG) printf("-scattering\n");
   // subset_w offset by k to give space for neighbor ghost cells
   MPI_Scatter(w, nperproc, MPI_DOUBLE, subset_w+k, nperproc, MPI_DOUBLE,
     0, MPI_COMM_WORLD);
+
+if(DEBUG) printf("-initing ghost cells\n");
+  // get ghost cells
+  if(rank % 2 == 0) // even processors send then recv to up neighbor
+  {
+    MPI_Send(subset_w+k, k, MPI_DOUBLE, rank-1, 1, MPI_COMM_WORLD);
+    MPI_Recv(subset_w, k, MPI_DOUBLE, rank-1, 2, MPI_COMM_WORLD, &status);
+  }
+  else              // odd processors recv then send to down neighbor
+  {
+    MPI_Recv(subset_w+(k*(kperproc+1)), k, MPI_DOUBLE, rank+1, 1, 
+      MPI_COMM_WORLD, &status);
+    MPI_Send(subset_w+(k*kperproc), k, MPI_DOUBLE, rank+1, 2,
+      MPI_COMM_WORLD);
+  }
+
+  if(rank % 2 == 0) // even proc send then recv to down neighbor
+  {
+    MPI_Send(subset_w+(k*kperproc), k, MPI_DOUBLE, rank+1, 3, 
+      MPI_COMM_WORLD);
+    MPI_Recv(subset_w+(k*(kperproc+1)), k, MPI_DOUBLE, rank+1, 4, 
+      MPI_COMM_WORLD, &status);
+  }
+  else              // odd proc recv then send to up neighbor
+  {
+    MPI_Recv(subset_w, k, MPI_DOUBLE, rank-1, 3, MPI_COMM_WORLD, &status);
+    MPI_Send(subset_w+k, k, MPI_DOUBLE, rank-1, 4, MPI_COMM_WORLD);
+  }
+
 if(DEBUG) printf("-matvec looping\n");
   for(r = 1; r < kperproc + 1; ++r)
   {

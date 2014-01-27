@@ -1,9 +1,9 @@
 /* UCSB CS240A, Winter Quarter 2014
  * Main and supporting functions for the Conjugate Gradient Solver on a 5-point stencil
  *
- * NAMES:
- * PERMS:
- * DATE:
+ * NAMES: Kyle Jorgensen and Jasen Hall
+ * PERMS: ### and 8408742
+ * DATE: 28 January 2014
  */
 #include "mpi.h"
 #include "hw2harness.h"
@@ -325,13 +325,13 @@ printf("%d %d + %f\n", niters, rank, *(subset_w+cellsperproc+k));
 
       subset_v[i] = 4 * subset_w[i];
 
-      if(r != 1)  // account for offset of ghost row
+      if(rank != 0 || r != 1)  // account for offset of ghost row
         subset_v[i] -= subset_w[i-k];
       if(s != 0)
         subset_v[i] -= subset_w[i-1];
       if(s != k-1)
         subset_v[i] -= subset_w[i+1];
-      if(r != rowsperproc)  // account for offset of ghost row
+      if(rank != nprocs - 1 || r != rowsperproc)  // account for offset of ghost row
         subset_v[i] -= subset_w[i+k];
     }
   }

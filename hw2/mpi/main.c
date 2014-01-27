@@ -13,7 +13,7 @@
 
 #define DEBUG 1 
 #define PDDOT 1
-#define PDAXPY 1 
+#define PDAXPY 1
 
 double* load_vec( char* filename, int* k );
 void save_vec( int k, double* x );
@@ -207,12 +207,6 @@ double ddot(double *v, double *w, int n)
 // Overwrites vector v with scalar1*v + scalar2*w
 void daxpy(double *v, double *w, double scalar1, double scalar2, int n)
 {
-
-  /* To parallelize - broadcast the scalars scalar1 and scalar2,
-   * then split up the loop computation for the portions of v and w 
-   * that you need, and combine the result at the end.
-   */
-
   int i;
 #if PDAXPY == 1
   double localscalar1, localscalar2;

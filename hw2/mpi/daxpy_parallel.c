@@ -40,15 +40,19 @@ void daxpy(double *v, const double *w, double scalar1, double scalar2, int n)
 
 int main( int argc, char* argv[] )
 {
-	double vec1[3] = {1.0, 2.0, 3.0, 4.0};
-	double vec2[3] = {1.0, 1.0, 1.0, 1.0};
-	int size = 3;
+	double vec1[4] = {1.0, 2.0, 3.0, 4.0};
+	double vec2[4] = {1.0, 1.0, 1.0, 1.0};
+	int size = 4;
 	double a = 1.0;
 	double b = -2.0;
+  int rank, nprocs;
 
 	MPI_Init( &argc, &argv );
 
-	daxpy(&v, &w, a, b, size);
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
+
+	daxpy(&vec1, &vec2, a, b, size);
 
   if(rank == 0){}
   	printf("Result of daxpy is:\n{ ");
@@ -58,7 +62,7 @@ int main( int argc, char* argv[] )
   	}
   	printf("}\n");
   }
-  
+
 	MPI_Finalize();
 
 	return 0;

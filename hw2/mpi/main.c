@@ -14,12 +14,13 @@
 #define DEBUG 1 
 #define PDDOT 1
 #define PDAXPY 1
+#define PMATVEC 1
 
 double* load_vec( char* filename, int* k );
 void save_vec( int k, double* x );
 double *cgsolve(double *x, int* i, double* norm, int n);
 double ddot(double *v, double *w, int n);
-void matvec(double *v, const double *w, int n);
+void matvec(double *v, double *w, int n, int niter);
 void daxpy(double *v, double *w, double alpha, double beta, int n);
 
 int rank, nprocs;
@@ -82,10 +83,12 @@ int main( int argc, char* argv[] ) {
 
   	printf("Correct: %d\n", correct);
   }
+/*
   else
   {
-    printf("-only processor 0 prints results\n");
+if(DEBUG) printf("-only processor 0 prints results\n");
   }
+*/
 	
 	// Deallocate 
 	
@@ -137,15 +140,13 @@ double *cgsolve(double *x, int *iter, double *norm, int n)
 
   while(relres > TARGRES && niters < MAXITERS)
   {
-if(DEBUG) printf("-proc %d in cgsolve loop %d\n", rank, niters);
+//if(DEBUG) printf("-proc %d in cgsolve loop %d\n", rank, niters);
     ++niters;
-    matvec(Ad, d, n);
-//if(DEBUG) printf("-proc %d entering ddot alpha\n", rank);
+    matvec(Ad, d, n, niters);
     alpha = rtr / ddot(d, Ad, n);
     daxpy(x, d, 1, alpha, n);
     daxpy(r, Ad, 1, -alpha, n);
     rtrold = rtr;
-//if(DEBUG) printf("-proc %d entering ddot rtr\n", rank);
     rtr = ddot(r, r, n);
     beta = rtr / rtrold;
     daxpy(d, r, beta, 1, n);
@@ -153,7 +154,7 @@ if(DEBUG) printf("-proc %d in cgsolve loop %d\n", rank, niters);
     MPI_Bcast(&relres, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
   }
 
-  printf("niters is %d on proc %d\n", niters, rank);
+if(DEBUG) printf("niters is %d on proc %d\n", niters, rank);
 
   // returning values to be printed after a run
   *iter = niters;
@@ -171,28 +172,19 @@ double ddot(double *v, double *w, int n)
   int cellsperproc = n/nprocs;
   double subset_v[cellsperproc];
   double subset_w[cellsperproc];
-  //double *subset_v, *subset_w;
 
-  //subset_v = (double *)malloc(sizeof(double) * cellsperproc);
-  //subset_w = (double *)malloc(sizeof(double) * cellsperproc);
-
-//if(DEBUG) printf("-proc %d scattering ddot v\n", rank);
   MPI_Scatter(v, cellsperproc, MPI_DOUBLE, subset_v, cellsperproc, MPI_DOUBLE,
     0, MPI_COMM_WORLD);
-//if(DEBUG) printf("-proc %d scattering ddot w\n", rank);
   MPI_Scatter(w, cellsperproc, MPI_DOUBLE, subset_w, cellsperproc, MPI_DOUBLE,
     0, MPI_COMM_WORLD);
-//if(DEBUG) printf("-proc %d finished scattering\n", rank);
 
   for(i = 0; i < cellsperproc; ++i)
   {
     prod += subset_v[i] * subset_w[i];
   }
 
-//if(DEBUG) printf("-proc %d reducing in ddot\n", rank);
   MPI_Reduce(&prod, &prodsum, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
 
-//if(DEBUG) printf("-proc %d returning from ddot\n", rank);
   return prodsum;
 #else
   for(i = 0; i < n; ++i)
@@ -249,12 +241,111 @@ void daxpy(double *v, double *w, double scalar1, double scalar2, int n)
 #endif
 }
 
-void matvec(double *v, const double *w, int n)
+void matvec(double *v, double *w, int n, int niters)
 {
   int k = (int)sqrt(n);
   int i;
   int r, s;   //row, column
+#if PMATVEC == 1
+  int cellsperproc = n / nprocs;
+  int rowsperproc = cellsperproc / k;
+  double subset_v[cellsperproc + (2*k)];
+  double subset_w[cellsperproc + (2*k)];
+  int upneighbor, downneighbor;
+  MPI_Status status;
 
+  MPI_Scatter(w, cellsperproc, MPI_DOUBLE, subset_w + k, cellsperproc,
+    MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+  // figure out comm partners for this processor
+  // top and bottom processors will exchange data they don't use
+  upneighbor = (rank - 1 >= 0) ? rank - 1 : nprocs - 1;
+  downneighbor = (rank + 1) % nprocs;
+
+  // even send/recv up, odd recv/send down
+  if(rank % 2 == 0) // even
+  {
+    // send first row of real data (+ k)
+    MPI_Send(subset_w + k, k, MPI_DOUBLE, upneighbor, 1, MPI_COMM_WORLD);
+    // recv first row of ghost data (+ 0)
+    MPI_Recv(subset_w, k, MPI_DOUBLE, upneighbor, 2, MPI_COMM_WORLD,
+      &status);
+  }
+  else  // odd
+  {
+    // recv last row of ghost data (+ cellsperproc + k)
+    MPI_Recv(subset_w + (cellsperproc + k), k, MPI_DOUBLE, downneighbor,
+      1, MPI_COMM_WORLD, &status);
+    // send last row of real data (+ cellsperproc)
+    MPI_Send(subset_w + cellsperproc, k, MPI_DOUBLE, downneighbor, 2,
+      MPI_COMM_WORLD);
+  }
+
+  // even send/recv down, odd recv/send up
+  if(rank % 2 == 0) // even
+  {
+    // send last row of real data (+ cellsperproc)
+    MPI_Send(subset_w + cellsperproc, k, MPI_DOUBLE, downneighbor, 3,
+      MPI_COMM_WORLD);
+    // recv last row of ghost data (+ cellsperproc + k)
+    MPI_Recv(subset_w + (cellsperproc + k), k, MPI_DOUBLE, downneighbor,
+      4, MPI_COMM_WORLD, &status);
+  }
+  else  // odd
+  {
+    // recv first row of ghost data (+ 0)
+    MPI_Recv(subset_w, k, MPI_DOUBLE, upneighbor, 3, MPI_COMM_WORLD,
+      &status);
+    // send first row of real data (+ k)
+    MPI_Send(subset_w + k, k, MPI_DOUBLE, upneighbor, 4, MPI_COMM_WORLD);
+  }
+
+if(DEBUG && (niters % 2 == 0)) {
+if(rank == 0) {
+printf("%d %d - %f\n", niters, rank, *(subset_w));
+printf("%d %d + %f\n", niters, rank, *(subset_w+k));
+} else if(rank == nprocs - 1) {
+printf("%d %d - %f\n", niters, rank, *(subset_w+cellsperproc));
+printf("%d %d + %f\n", niters, rank, *(subset_w+cellsperproc+k));
+}
+}
+
+  // init rows we plan to use
+  for(i = k; i < k + cellsperproc; ++i)
+  {
+    subset_v[i] = 0.0;
+  }
+
+  for(r = 1; r < rowsperproc + 1; ++r)  // +1 to offset leading ghost row
+  {
+    for(s = 0; s < k; ++ s)
+    {
+      i = (r * k) + s;
+
+      subset_v[i] = 4 * subset_w[i];
+
+      if(r != 1)  // account for offset of ghost row
+        subset_v[i] -= subset_w[i-k];
+      if(s != 0)
+        subset_v[i] -= subset_w[i-1];
+      if(s != k-1)
+        subset_v[i] -= subset_w[i+1];
+      if(r != k)  // account for offset of ghost row
+        subset_v[i] -= subset_w[i+k];
+    }
+  }
+
+  if(rank == 0)
+  {
+    MPI_Gather(subset_v + k, cellsperproc, MPI_DOUBLE, v, cellsperproc, MPI_DOUBLE,
+      0, MPI_COMM_WORLD);
+  }
+  else
+  {
+    MPI_Gather(subset_v + k, cellsperproc, MPI_DOUBLE, NULL, cellsperproc,
+      MPI_DOUBLE, 0, MPI_COMM_WORLD);
+  }
+#else
   for(i = 0; i < n; ++i)
   {
     v[i] = 0.0;
@@ -277,7 +368,7 @@ void matvec(double *v, const double *w, int n)
         v[i] -= w[i+k];
     }
   }
-
+#endif
 }
 
 

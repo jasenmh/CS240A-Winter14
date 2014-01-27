@@ -11,8 +11,8 @@
 #include <stdlib.h>
 #include <math.h>
 
-#define DEBUG 1
-#define PDDOT 0
+#define DEBUG 0
+#define PDDOT 1
 #define PDAXPY 0
 
 double* load_vec( char* filename, int* k );
@@ -84,7 +84,7 @@ int main( int argc, char* argv[] ) {
   }
   else
   {
-    printf("-only processor 0 prints results");
+    printf("-only processor 0 prints results\n");
   }
 	
 	// Deallocate 
@@ -92,8 +92,8 @@ int main( int argc, char* argv[] ) {
   //if(niters > 0)
   //  free(b);
 
-	if(niters > 0)
-	  free(x);
+	//if(niters > 0)
+	//  free(x);
 	
 	MPI_Finalize();
 	
@@ -135,22 +135,25 @@ double *cgsolve(double *x, int *iter, double *norm, int n)
   rtr = ddot(r, r, n);
   relres = 1.0;
 
-
   while(relres > TARGRES && niters < MAXITERS)
   {
+printf("-proc %d in cgsolve loop %d\n", rank, niters);
     ++niters;
     matvec(Ad, d, n);
+if(DEBUG) printf("-proc %d entering ddot alpha\n", rank);
     alpha = rtr / ddot(d, Ad, n);
     daxpy(x, d, 1, alpha, n);
     daxpy(r, Ad, 1, -alpha, n);
     rtrold = rtr;
+if(DEBUG) printf("-proc %d entering ddot rtr\n", rank);
     rtr = ddot(r, r, n);
     beta = rtr / rtrold;
     daxpy(d, r, beta, 1, n);
     relres = sqrt(rtr) / normb;
+    MPI_Bcast(&relres, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
   }
 
-  printf("niters is %d\n", niters);
+  printf("niters is %d on proc %d\n", niters, rank);
 
   // returning values to be printed after a run
   *iter = niters;
@@ -173,18 +176,23 @@ double ddot(double *v, double *w, int n)
   //subset_v = (double *)malloc(sizeof(double) * cellsperproc);
   //subset_w = (double *)malloc(sizeof(double) * cellsperproc);
 
+if(DEBUG) printf("-proc %d scattering ddot v\n", rank);
   MPI_Scatter(v, cellsperproc, MPI_DOUBLE, subset_v, cellsperproc, MPI_DOUBLE,
     0, MPI_COMM_WORLD);
+if(DEBUG) printf("-proc %d scattering ddot w\n", rank);
   MPI_Scatter(w, cellsperproc, MPI_DOUBLE, subset_w, cellsperproc, MPI_DOUBLE,
     0, MPI_COMM_WORLD);
+if(DEBUG) printf("-proc %d finished scattering\n", rank);
 
   for(i = 0; i < cellsperproc; ++i)
   {
     prod += subset_v[i] * subset_w[i];
   }
 
+if(DEBUG) printf("-proc %d reducing in ddot\n", rank);
   MPI_Reduce(&prod, &prodsum, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
 
+if(DEBUG) printf("-proc %d returning from ddot\n", rank);
   return prodsum;
 #else
   for(i = 0; i < n; ++i)

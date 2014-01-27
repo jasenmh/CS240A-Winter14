@@ -140,12 +140,10 @@ double *cgsolve(double *x, int *iter, double *norm, int n)
 if(DEBUG) printf("-proc %d in cgsolve loop %d\n", rank, niters);
     ++niters;
     matvec(Ad, d, n);
-//if(DEBUG) printf("-proc %d entering ddot alpha\n", rank);
     alpha = rtr / ddot(d, Ad, n);
     daxpy(x, d, 1, alpha, n);
     daxpy(r, Ad, 1, -alpha, n);
     rtrold = rtr;
-//if(DEBUG) printf("-proc %d entering ddot rtr\n", rank);
     rtr = ddot(r, r, n);
     beta = rtr / rtrold;
     daxpy(d, r, beta, 1, n);
@@ -171,28 +169,19 @@ double ddot(double *v, double *w, int n)
   int cellsperproc = n/nprocs;
   double subset_v[cellsperproc];
   double subset_w[cellsperproc];
-  //double *subset_v, *subset_w;
 
-  //subset_v = (double *)malloc(sizeof(double) * cellsperproc);
-  //subset_w = (double *)malloc(sizeof(double) * cellsperproc);
-
-//if(DEBUG) printf("-proc %d scattering ddot v\n", rank);
   MPI_Scatter(v, cellsperproc, MPI_DOUBLE, subset_v, cellsperproc, MPI_DOUBLE,
     0, MPI_COMM_WORLD);
-//if(DEBUG) printf("-proc %d scattering ddot w\n", rank);
   MPI_Scatter(w, cellsperproc, MPI_DOUBLE, subset_w, cellsperproc, MPI_DOUBLE,
     0, MPI_COMM_WORLD);
-//if(DEBUG) printf("-proc %d finished scattering\n", rank);
 
   for(i = 0; i < cellsperproc; ++i)
   {
     prod += subset_v[i] * subset_w[i];
   }
 
-//if(DEBUG) printf("-proc %d reducing in ddot\n", rank);
   MPI_Reduce(&prod, &prodsum, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
 
-//if(DEBUG) printf("-proc %d returning from ddot\n", rank);
   return prodsum;
 #else
   for(i = 0; i < n; ++i)

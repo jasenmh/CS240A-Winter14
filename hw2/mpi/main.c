@@ -11,7 +11,7 @@
 #include <stdlib.h>
 #include <math.h>
 
-#define DEBUG 1 
+#define DEBUG 0 
 #define PDDOT 1
 #define PDAXPY 1
 #define PMATVEC 1
@@ -311,7 +311,8 @@ printf("%d %d + %f\n", niters, rank, *(subset_w+cellsperproc+k));
 }
 
   // init rows we plan to use
-  for(i = k; i < k + cellsperproc; ++i)
+  //for(i = k; i < k + cellsperproc; ++i)
+  for(i = 0; i < cellsperproc + 2*k; ++i)
   {
     subset_v[i] = 0.0;
   }
@@ -330,7 +331,7 @@ printf("%d %d + %f\n", niters, rank, *(subset_w+cellsperproc+k));
         subset_v[i] -= subset_w[i-1];
       if(s != k-1)
         subset_v[i] -= subset_w[i+1];
-      if(r != k)  // account for offset of ghost row
+      if(r != rowsperproc)  // account for offset of ghost row
         subset_v[i] -= subset_w[i+k];
     }
   }

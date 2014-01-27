@@ -11,16 +11,16 @@
 #include <stdlib.h>
 #include <math.h>
 
-#define DEBUG 0
+#define DEBUG 1 
 #define PDDOT 1
-#define PDAXPY 0
+#define PDAXPY 1 
 
 double* load_vec( char* filename, int* k );
 void save_vec( int k, double* x );
 double *cgsolve(double *x, int* i, double* norm, int n);
 double ddot(double *v, double *w, int n);
 void matvec(double *v, const double *w, int n);
-void daxpy(double *v, const double *w, double alpha, double beta, int n);
+void daxpy(double *v, double *w, double alpha, double beta, int n);
 
 int rank, nprocs;
 
@@ -137,15 +137,15 @@ double *cgsolve(double *x, int *iter, double *norm, int n)
 
   while(relres > TARGRES && niters < MAXITERS)
   {
-printf("-proc %d in cgsolve loop %d\n", rank, niters);
+if(DEBUG) printf("-proc %d in cgsolve loop %d\n", rank, niters);
     ++niters;
     matvec(Ad, d, n);
-if(DEBUG) printf("-proc %d entering ddot alpha\n", rank);
+//if(DEBUG) printf("-proc %d entering ddot alpha\n", rank);
     alpha = rtr / ddot(d, Ad, n);
     daxpy(x, d, 1, alpha, n);
     daxpy(r, Ad, 1, -alpha, n);
     rtrold = rtr;
-if(DEBUG) printf("-proc %d entering ddot rtr\n", rank);
+//if(DEBUG) printf("-proc %d entering ddot rtr\n", rank);
     rtr = ddot(r, r, n);
     beta = rtr / rtrold;
     daxpy(d, r, beta, 1, n);
@@ -176,23 +176,23 @@ double ddot(double *v, double *w, int n)
   //subset_v = (double *)malloc(sizeof(double) * cellsperproc);
   //subset_w = (double *)malloc(sizeof(double) * cellsperproc);
 
-if(DEBUG) printf("-proc %d scattering ddot v\n", rank);
+//if(DEBUG) printf("-proc %d scattering ddot v\n", rank);
   MPI_Scatter(v, cellsperproc, MPI_DOUBLE, subset_v, cellsperproc, MPI_DOUBLE,
     0, MPI_COMM_WORLD);
-if(DEBUG) printf("-proc %d scattering ddot w\n", rank);
+//if(DEBUG) printf("-proc %d scattering ddot w\n", rank);
   MPI_Scatter(w, cellsperproc, MPI_DOUBLE, subset_w, cellsperproc, MPI_DOUBLE,
     0, MPI_COMM_WORLD);
-if(DEBUG) printf("-proc %d finished scattering\n", rank);
+//if(DEBUG) printf("-proc %d finished scattering\n", rank);
 
   for(i = 0; i < cellsperproc; ++i)
   {
     prod += subset_v[i] * subset_w[i];
   }
 
-if(DEBUG) printf("-proc %d reducing in ddot\n", rank);
+//if(DEBUG) printf("-proc %d reducing in ddot\n", rank);
   MPI_Reduce(&prod, &prodsum, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
 
-if(DEBUG) printf("-proc %d returning from ddot\n", rank);
+//if(DEBUG) printf("-proc %d returning from ddot\n", rank);
   return prodsum;
 #else
   for(i = 0; i < n; ++i)
@@ -205,7 +205,7 @@ if(DEBUG) printf("-proc %d returning from ddot\n", rank);
 }
 
 // Overwrites vector v with scalar1*v + scalar2*w
-void daxpy(double *v, const double *w, double scalar1, double scalar2, int n)
+void daxpy(double *v, double *w, double scalar1, double scalar2, int n)
 {
 
   /* To parallelize - broadcast the scalars scalar1 and scalar2,
@@ -214,10 +214,45 @@ void daxpy(double *v, const double *w, double scalar1, double scalar2, int n)
    */
 
   int i;
+#if PDAXPY == 1
+  double localscalar1, localscalar2;
+  int cellsperproc = n/nprocs;
+  double subset_v[cellsperproc];
+  double subset_w[cellsperproc];
+
+  MPI_Scatter(v, cellsperproc, MPI_DOUBLE, subset_v, cellsperproc, MPI_DOUBLE,
+    0, MPI_COMM_WORLD);
+  MPI_Scatter(w, cellsperproc, MPI_DOUBLE, subset_w, cellsperproc, MPI_DOUBLE,
+    0, MPI_COMM_WORLD);
+  if(rank == 0)
+  {
+    localscalar1 = scalar1;
+    localscalar2 = scalar2;
+  }
+  MPI_Bcast(&localscalar1, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+  MPI_Bcast(&localscalar2, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+  for(i = 0; i < cellsperproc; ++i)
+  {
+    subset_v[i] = subset_v[i]*localscalar1 + subset_w[i]*localscalar2;
+  }
+
+  if(rank == 0)
+  {
+    MPI_Gather(subset_v, cellsperproc, MPI_DOUBLE, v, cellsperproc, MPI_DOUBLE,
+      0, MPI_COMM_WORLD);
+  }
+  else
+  {
+    MPI_Gather(subset_v, cellsperproc, MPI_DOUBLE, NULL, cellsperproc,
+      MPI_DOUBLE, 0, MPI_COMM_WORLD);
+  }
+#else
   for(i = 0; i < n; i++)
   {
     v[i] = v[i]*scalar1 + w[i]*scalar2;
   }
+#endif
 }
 
 void matvec(double *v, const double *w, int n)

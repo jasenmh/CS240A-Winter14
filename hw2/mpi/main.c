@@ -11,7 +11,9 @@
 #include <stdlib.h>
 #include <math.h>
 
-#define DEBUG 0
+#define DEBUG 1
+#define PDDOT 0
+#define PDAXPY 0
 
 double* load_vec( char* filename, int* k );
 void save_vec( int k, double* x );
@@ -19,6 +21,8 @@ double *cgsolve(double *x, int* i, double* norm, int n);
 double ddot(double *v, double *w, int n);
 void matvec(double *v, const double *w, int n);
 void daxpy(double *v, const double *w, double alpha, double beta, int n);
+
+int rank, nprocs;
 
 int main( int argc, char* argv[] ) {
 	int writeOutX = 0;
@@ -50,33 +54,6 @@ int main( int argc, char* argv[] ) {
 	}
 	writeOutX = atoi( argv[argc-1] ); // Write X to file if true, do not write if unspecified.
 
-	// some tests of basic functionality
-#if DEBUG == 1
-
-	double ta[3] = {1.0, 1.0, 1.0};
-	double tb[3] = {0.0, 0.0, 1.0};
-	double tc = 1.0;
-	double td = 2.0;
-	double te;
-	double tz;
-	int i;
-
-	tz = ddot(ta, tb, 3);
-	printf("test: ddot is %f\n", tz);
-	daxpy(ta, tb, tc, td, 3);
-	printf("test: daxpy is (%f, %f, %f)\n", ta[0], ta[1], ta[2]);
-	for(i = 0; i < 3; ++i)
-	{
-	  te = cs240_getB(i, 3);
-	  printf("b(%d) = %f\n", i, te);
-	}
-	matvec(ta, tb, 3);
-	printf("test: matvec is (%f, %f, %f)\n", ta[0], ta[1], ta[2]);
-
-	MPI_Finalize();
-	return 0;
-#endif
-	
 	// Start Timer
 	t1 = MPI_Wtime();
 	
@@ -93,20 +70,27 @@ int main( int argc, char* argv[] ) {
 	}
 		
 	// Output
-	printf( "Problem size (k): %d\n",k);
-	if(niters > 0) {
-	  printf( "Norm of the residual after %d iterations: %lf\n", niters, norm);
-	}
-	printf( "Elapsed time during CGSOLVE: %lf\n", t2-t1);
+	if(rank == 0)
+  {
+  	printf( "Problem size (k): %d\n",k);
+  	if(niters > 0) {
+  	  printf( "Norm of the residual after %d iterations: %lf\n", niters, norm);
+  	}
+  	printf( "Elapsed time during CGSOLVE: %lf\n", t2-t1);
 
-	correct = cs240_verify(x, k, t2-t1);
+  	correct = cs240_verify(x, k, t2-t1);
 
-	printf("Correct: %d\n", correct);
+  	printf("Correct: %d\n", correct);
+  }
+  else
+  {
+    printf("-only processor 0 prints results");
+  }
 	
 	// Deallocate 
 	
-	// if(niters > 0)
-	//   free(b);
+  //if(niters > 0)
+  //  free(b);
 
 	if(niters > 0)
 	  free(x);
@@ -136,7 +120,7 @@ double *cgsolve(double *x, int *iter, double *norm, int n)
   double rtr;
   double rtrold;
   double normb;
-  int i, rank, nprocs;
+  int i;
 
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
@@ -150,6 +134,7 @@ double *cgsolve(double *x, int *iter, double *norm, int n)
   normb = sqrt(ddot(r, r, n));
   rtr = ddot(r, r, n);
   relres = 1.0;
+
 
   while(relres > TARGRES && niters < MAXITERS)
   {
@@ -178,13 +163,37 @@ double ddot(double *v, double *w, int n)
 {
   double prod = 0.0;
   int i;
+#if PDDOT == 1
+  double prodsum = 0.0;
+  int cellsperproc = n/nprocs;
+  double subset_v[cellsperproc];
+  double subset_w[cellsperproc];
+  //double *subset_v, *subset_w;
 
+  //subset_v = (double *)malloc(sizeof(double) * cellsperproc);
+  //subset_w = (double *)malloc(sizeof(double) * cellsperproc);
+
+  MPI_Scatter(v, cellsperproc, MPI_DOUBLE, subset_v, cellsperproc, MPI_DOUBLE,
+    0, MPI_COMM_WORLD);
+  MPI_Scatter(w, cellsperproc, MPI_DOUBLE, subset_w, cellsperproc, MPI_DOUBLE,
+    0, MPI_COMM_WORLD);
+
+  for(i = 0; i < cellsperproc; ++i)
+  {
+    prod += subset_v[i] * subset_w[i];
+  }
+
+  MPI_Reduce(&prod, &prodsum, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+
+  return prodsum;
+#else
   for(i = 0; i < n; ++i)
   {
     prod += v[i] * w[i];
   }
 
   return prod;
+#endif
 }
 
 // Overwrites vector v with scalar1*v + scalar2*w

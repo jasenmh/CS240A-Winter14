@@ -207,17 +207,28 @@ if(DEBUG) printf("-proc %d returning from ddot\n", rank);
 // Overwrites vector v with scalar1*v + scalar2*w
 void daxpy(double *v, const double *w, double scalar1, double scalar2, int n)
 {
-
-  /* To parallelize - broadcast the scalars scalar1 and scalar2,
-   * then split up the loop computation for the portions of v and w 
-   * that you need, and combine the result at the end.
-   */
-
   int i;
+
+#if PDAXPY == 1
+  int numRows = n/nprocs;
+  double tmp[numRows];
+
+  /* Only calculate on the portions of v and w for which each proc is responsible,
+     then gather all the results back into vector v on processor 0
+   */
+  for (i = 0; i < numrows; ++i)
+   {
+     temp[i] = v[i*numrows + rank]*scalar1 + w[i*numrows + rank]*scalar2;
+   }
+
+   MPI_Gather(temp, numrows, MPI_DOUBLE, v, numRows, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+#else
   for(i = 0; i < n; i++)
   {
     v[i] = v[i]*scalar1 + w[i]*scalar2;
   }
+#endif
 }
 
 void matvec(double *v, const double *w, int n)

@@ -16,6 +16,8 @@
 #define PDAXPY 1
 #define PMATVEC 1
 
+#define MAXITERSLIMIT 100
+
 double* load_vec( char* filename, int* k );
 void save_vec( int k, double* x );
 double *cgsolve(double *x, int* i, double* norm, int n);
@@ -83,12 +85,6 @@ int main( int argc, char* argv[] ) {
 
   	printf("Correct: %d\n", correct);
   }
-/*
-  else
-  {
-if(DEBUG) printf("-only processor 0 prints results\n");
-  }
-*/
 	
 	// Deallocate 
 	
@@ -112,7 +108,7 @@ double *cgsolve(double *x, int *iter, double *norm, int n)
 {
   int niters = 0;   // number of iterations
   int possmax = 5*sqrt(n);  // possible max. iterations
-  int MAXITERS = (1000 > possmax) ? 1000 : possmax;
+  int MAXITERS = (MAXITERSLIMIT > possmax) ? MAXITERSLIMIT : possmax;
   double TARGRES = 1.0e-6;  // target residual
   double relres;  // relative residual
   //double *x;  // vector that we are solving for

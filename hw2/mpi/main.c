@@ -2,7 +2,7 @@
  * Main and supporting functions for the Conjugate Gradient Solver on a 5-point stencil
  *
  * NAMES: Kyle Jorgensen and Jasen Hall
- * PERMS: ### and 8408742
+ * PERMS: 4165916 and 8408742
  * DATE: 28 January 2014
  */
 #include "mpi.h"
@@ -215,6 +215,8 @@ void daxpy(double *v, double *w, double scalar1, double scalar2, int n)
     localscalar1 = scalar1;
     localscalar2 = scalar2;
   }
+  // Broadcast the scalars from proc 0 so that everyone is computing with the 
+  // correct values of alpha and beta
   MPI_Bcast(&localscalar1, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
   MPI_Bcast(&localscalar2, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
@@ -223,12 +225,13 @@ void daxpy(double *v, double *w, double scalar1, double scalar2, int n)
     subset_v[i] = subset_v[i]*localscalar1 + subset_w[i]*localscalar2;
   }
 
+  // Processor 0 receives all the subset_v data from everyone, and then puts it in v
   if(rank == 0)
   {
     MPI_Gather(subset_v, cellsperproc, MPI_DOUBLE, v, cellsperproc, MPI_DOUBLE,
       0, MPI_COMM_WORLD);
   }
-  else
+  else  // Everyone else just sends its subset_v data to proc 0
   {
     MPI_Gather(subset_v, cellsperproc, MPI_DOUBLE, NULL, cellsperproc,
       MPI_DOUBLE, 0, MPI_COMM_WORLD);
@@ -249,11 +252,15 @@ void matvec(double *v, double *w, int n, int niters)
 #if PMATVEC == 1
   int cellsperproc = n / nprocs;
   int rowsperproc = cellsperproc / k;
-  double subset_v[cellsperproc + (2*k)];
-  double subset_w[cellsperproc + (2*k)];
+
+  // These subset vectors store an extra 2*k amount of data because they store
+  // one ghost row above and below their own set of rows.  
+  double subset_v[cellsperproc + (2*k)]; 
+  double subset_w[cellsperproc + (2*k)]; 
   int upneighbor, downneighbor;
   MPI_Status status;
 
+  // Scatter the w vector on proc 0 to each processor's subset_w vector
   MPI_Scatter(w, cellsperproc, MPI_DOUBLE, subset_w + k, cellsperproc,
     MPI_DOUBLE, 0, MPI_COMM_WORLD);
 

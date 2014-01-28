@@ -20,7 +20,7 @@ double* load_vec( char* filename, int* k );
 void save_vec( int k, double* x );
 double *cgsolve(double *x, int* i, double* norm, int n);
 double ddot(double *v, double *w, int n);
-void matvec(double *v, double *w, int n, int niter);
+void matvec(double *v, double *w, int n);
 void daxpy(double *v, double *w, double alpha, double beta, int n);
 
 int rank, nprocs;
@@ -142,7 +142,7 @@ double *cgsolve(double *x, int *iter, double *norm, int n)
   {
 //if(DEBUG) printf("-proc %d in cgsolve loop %d\n", rank, niters);
     ++niters;
-    matvec(Ad, d, n, niters);
+    matvec(Ad, d, n);
     alpha = rtr / ddot(d, Ad, n);
     daxpy(x, d, 1, alpha, n);
     daxpy(r, Ad, 1, -alpha, n);
@@ -244,7 +244,7 @@ void daxpy(double *v, double *w, double scalar1, double scalar2, int n)
 #endif
 }
 
-void matvec(double *v, double *w, int n, int niters)
+void matvec(double *v, double *w, int n)
 {
   int k = (int)sqrt(n);
   int i;
@@ -310,15 +310,15 @@ void matvec(double *v, double *w, int n, int niters)
       }
   }
 
-if(DEBUG && (niters % 2 == 0)) {
-if(rank == 0) {
-printf("%d %d - %f\n", niters, rank, *(subset_w));
-printf("%d %d + %f\n", niters, rank, *(subset_w+k));
-} else if(rank == nprocs - 1) {
-printf("%d %d - %f\n", niters, rank, *(subset_w+cellsperproc));
-printf("%d %d + %f\n", niters, rank, *(subset_w+cellsperproc+k));
-}
-}
+// if(DEBUG && (niters % 2 == 0)) {
+// if(rank == 0) {
+// printf("%d %d - %f\n", niters, rank, *(subset_w));
+// printf("%d %d + %f\n", niters, rank, *(subset_w+k));
+// } else if(rank == nprocs - 1) {
+// printf("%d %d - %f\n", niters, rank, *(subset_w+cellsperproc));
+// printf("%d %d + %f\n", niters, rank, *(subset_w+cellsperproc+k));
+// }
+// }
 
   // init rows we plan to use
   //for(i = k; i < k + cellsperproc; ++i)

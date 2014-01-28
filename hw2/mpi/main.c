@@ -274,39 +274,39 @@ void matvec(double *v, double *w, int n, int niters)
     // even send/recv up, odd recv/send down
     if(rank % 2 == 0) // even
       {
-	// send first row of real data (+ k)
-	MPI_Send(subset_w + k, k, MPI_DOUBLE, upneighbor, 1, MPI_COMM_WORLD);
-	// recv first row of ghost data (+ 0)
-	MPI_Recv(subset_w, k, MPI_DOUBLE, upneighbor, 2, MPI_COMM_WORLD,
-		 &status);
+      	// send first row of real data (+ k)
+      	MPI_Send(subset_w + k, k, MPI_DOUBLE, upneighbor, 1, MPI_COMM_WORLD);
+      	// recv first row of ghost data (+ 0)
+      	MPI_Recv(subset_w, k, MPI_DOUBLE, upneighbor, 2, MPI_COMM_WORLD,
+      		 &status);
       }
     else  // odd
       {
-	// recv last row of ghost data (+ cellsperproc + k)
-	MPI_Recv(subset_w + (cellsperproc + k), k, MPI_DOUBLE, downneighbor,
-		 1, MPI_COMM_WORLD, &status);
-	// send last row of real data (+ cellsperproc)
-	MPI_Send(subset_w + cellsperproc, k, MPI_DOUBLE, downneighbor, 2,
-		 MPI_COMM_WORLD);
+      	// recv last row of ghost data (+ cellsperproc + k)
+      	MPI_Recv(subset_w + (cellsperproc + k), k, MPI_DOUBLE, downneighbor,
+      		 1, MPI_COMM_WORLD, &status);
+      	// send last row of real data (+ cellsperproc)
+      	MPI_Send(subset_w + cellsperproc, k, MPI_DOUBLE, downneighbor, 2,
+      		 MPI_COMM_WORLD);
       }
     
     // even send/recv down, odd recv/send up
     if(rank % 2 == 0) // even
       {
-	// send last row of real data (+ cellsperproc)
-	MPI_Send(subset_w + cellsperproc, k, MPI_DOUBLE, downneighbor, 3,
-		 MPI_COMM_WORLD);
-	// recv last row of ghost data (+ cellsperproc + k)
-	MPI_Recv(subset_w + (cellsperproc + k), k, MPI_DOUBLE, downneighbor,
-		 4, MPI_COMM_WORLD, &status);
+      	// send last row of real data (+ cellsperproc)
+      	MPI_Send(subset_w + cellsperproc, k, MPI_DOUBLE, downneighbor, 3,
+      		 MPI_COMM_WORLD);
+      	// recv last row of ghost data (+ cellsperproc + k)
+      	MPI_Recv(subset_w + (cellsperproc + k), k, MPI_DOUBLE, downneighbor,
+      		 4, MPI_COMM_WORLD, &status);
       }
     else  // odd
       {
-	// recv first row of ghost data (+ 0)
-	MPI_Recv(subset_w, k, MPI_DOUBLE, upneighbor, 3, MPI_COMM_WORLD,
-		 &status);
-	// send first row of real data (+ k)
-	MPI_Send(subset_w + k, k, MPI_DOUBLE, upneighbor, 4, MPI_COMM_WORLD);
+      	// recv first row of ghost data (+ 0)
+      	MPI_Recv(subset_w, k, MPI_DOUBLE, upneighbor, 3, MPI_COMM_WORLD,
+      		 &status);
+      	// send first row of real data (+ k)
+      	MPI_Send(subset_w + k, k, MPI_DOUBLE, upneighbor, 4, MPI_COMM_WORLD);
       }
   }
 

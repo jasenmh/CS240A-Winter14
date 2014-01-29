@@ -11,15 +11,16 @@
 #include <stdlib.h>
 #include <math.h>
 
-#define DEBUG 0 
-#define PDDOT 1
+#define DEBUG 0   // 1 enables debug messages
+#define PDDOT 1   // these 3 variables enable parallel implementations when set to 1
 #define PDAXPY 1
 #define PMATVEC 1
 
-#define MAXITERSLIMIT 100
+#define MAXITERSLIMIT 1000  // change to set iteration limits for experiments
 
 double* load_vec( char* filename, int* k );
 void save_vec( int k, double* x );
+/* The functions below are written by the team */
 double *cgsolve(double *x, int* i, double* norm, int n);
 double ddot(double *v, double *w, int n);
 void matvec(double *v, double *w, int n);
@@ -104,6 +105,9 @@ int main( int argc, char* argv[] ) {
  *
  */
 
+/*
+ *  cgsolve() returns the approximation
+ */
 double *cgsolve(double *x, int *iter, double *norm, int n)
 {
   int niters = 0;   // number of iterations
@@ -124,19 +128,21 @@ double *cgsolve(double *x, int *iter, double *norm, int n)
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
 
+  // initialize our vectors
   for(i = 0; i < n; ++i)
   {
     x[i] = 0;
     r[i] = d[i] = cs240_getB(i, n);
   }
- 
+
+  // initialize scalars 
   normb = sqrt(ddot(r, r, n));
   rtr = ddot(r, r, n);
   relres = 1.0;
 
+  // loop until we have a sufficiently correct approximation
   while(relres > TARGRES && niters < MAXITERS)
   {
-//if(DEBUG) printf("-proc %d in cgsolve loop %d\n", rank, niters);
     ++niters;
     matvec(Ad, d, n);
     alpha = rtr / ddot(d, Ad, n);
@@ -147,10 +153,9 @@ double *cgsolve(double *x, int *iter, double *norm, int n)
     beta = rtr / rtrold;
     daxpy(d, r, beta, 1, n);
     relres = sqrt(rtr) / normb;
+    // send relres to all nodes so they can make while() tests
     MPI_Bcast(&relres, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
   }
-
-if(DEBUG) printf("niters is %d on proc %d\n", niters, rank);
 
   // returning values to be printed after a run
   *iter = niters;
@@ -159,16 +164,18 @@ if(DEBUG) printf("niters is %d on proc %d\n", niters, rank);
   return x;
 }
 
+// returns scalar dot product of two vectors
 double ddot(double *v, double *w, int n)
 {
   double prod = 0.0;
   int i;
-#if PDDOT == 1
+#if PDDOT == 1  // parallel implementation
   double prodsum = 0.0;
   int cellsperproc = n/nprocs;
-  double subset_v[cellsperproc];
-  double subset_w[cellsperproc];
+  double subset_v[cellsperproc];  // local storage for our portion
+  double subset_w[cellsperproc];  // of the v and w vectors
 
+  // give all nodes a piece of the vectors
   MPI_Scatter(v, cellsperproc, MPI_DOUBLE, subset_v, cellsperproc, MPI_DOUBLE,
     0, MPI_COMM_WORLD);
   MPI_Scatter(w, cellsperproc, MPI_DOUBLE, subset_w, cellsperproc, MPI_DOUBLE,
@@ -179,10 +186,11 @@ double ddot(double *v, double *w, int n)
     prod += subset_v[i] * subset_w[i];
   }
 
+  // retrieve vector subsets
   MPI_Reduce(&prod, &prodsum, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
 
   return prodsum;
-#else
+#else // serial implementation
   for(i = 0; i < n; ++i)
   {
     prod += v[i] * w[i];
@@ -196,12 +204,13 @@ double ddot(double *v, double *w, int n)
 void daxpy(double *v, double *w, double scalar1, double scalar2, int n)
 {
   int i;
-#if PDAXPY == 1
-  double localscalar1, localscalar2;
+#if PDAXPY == 1 // parallel implementation
+  double localscalar1, localscalar2;  // local copy of scalars
   int cellsperproc = n/nprocs;
-  double subset_v[cellsperproc];
+  double subset_v[cellsperproc];  // local copy of vectors
   double subset_w[cellsperproc];
 
+  // distribute subset of vectors to all nodes
   MPI_Scatter(v, cellsperproc, MPI_DOUBLE, subset_v, cellsperproc, MPI_DOUBLE,
     0, MPI_COMM_WORLD);
   MPI_Scatter(w, cellsperproc, MPI_DOUBLE, subset_w, cellsperproc, MPI_DOUBLE,
@@ -232,7 +241,7 @@ void daxpy(double *v, double *w, double scalar1, double scalar2, int n)
     MPI_Gather(subset_v, cellsperproc, MPI_DOUBLE, NULL, cellsperproc,
       MPI_DOUBLE, 0, MPI_COMM_WORLD);
   }
-#else
+#else // serial implementation
   for(i = 0; i < n; i++)
   {
     v[i] = v[i]*scalar1 + w[i]*scalar2;
@@ -240,12 +249,13 @@ void daxpy(double *v, double *w, double scalar1, double scalar2, int n)
 #endif
 }
 
+// calculate the matrix/vector product
 void matvec(double *v, double *w, int n)
 {
   int k = (int)sqrt(n);
   int i;
   int r, s;   //row, column
-#if PMATVEC == 1
+#if PMATVEC == 1  // parallel implementation
   int cellsperproc = n / nprocs;
   int rowsperproc = cellsperproc / k;
 
@@ -253,7 +263,7 @@ void matvec(double *v, double *w, int n)
   // one ghost row above and below their own set of rows.  
   double subset_v[cellsperproc + (2*k)]; 
   double subset_w[cellsperproc + (2*k)]; 
-  int upneighbor, downneighbor;
+  int upneighbor, downneighbor; // neighbor nodes
   MPI_Status status;
 
   // Scatter the w vector on proc 0 to each processor's subset_w vector
@@ -306,16 +316,6 @@ void matvec(double *v, double *w, int n)
       }
   }
 
-// if(DEBUG && (niters % 2 == 0)) {
-// if(rank == 0) {
-// printf("%d %d - %f\n", niters, rank, *(subset_w));
-// printf("%d %d + %f\n", niters, rank, *(subset_w+k));
-// } else if(rank == nprocs - 1) {
-// printf("%d %d - %f\n", niters, rank, *(subset_w+cellsperproc));
-// printf("%d %d + %f\n", niters, rank, *(subset_w+cellsperproc+k));
-// }
-// }
-
   // init rows we plan to use
   //for(i = k; i < k + cellsperproc; ++i)
   for(i = 0; i < cellsperproc + 2*k; ++i)
@@ -342,6 +342,7 @@ void matvec(double *v, double *w, int n)
     }
   }
 
+  // retrieve local subsets of vector from all nodes
   if(rank == 0)
   {
     MPI_Gather(subset_v + k, cellsperproc, MPI_DOUBLE, v, cellsperproc, MPI_DOUBLE,
@@ -352,7 +353,7 @@ void matvec(double *v, double *w, int n)
     MPI_Gather(subset_v + k, cellsperproc, MPI_DOUBLE, NULL, cellsperproc,
       MPI_DOUBLE, 0, MPI_COMM_WORLD);
   }
-#else
+#else // serial implementation
   for(i = 0; i < n; ++i)
   {
     v[i] = 0.0;

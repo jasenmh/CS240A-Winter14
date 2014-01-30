@@ -16,12 +16,60 @@
 
 double rec_cilkified(double * a, double * b, int n)
 {
+  int split_on;
+  int i;
+  double suma, sumb;
+
+  if(n <= COURSENESS) // go serial
+  {
+    suma = 0.0;
+
+    for(i = 0; i < n; ++i)
+    {
+      suma += a[i] * b[i];
+    }
+
+    return suma;
+  }
+  else  // split and recurse
+  {
+    split_on = n / 2; // truncting decimal
+    suma = cilk_spawn rec_cilkified(a, b, split_on);
+    sumb = rec_cilkified(a + split_on, b + split_on, n - split_on);
+    cilk_sync;
+
+    return suma + sumb;
+  }
+
 	return 0;
 }
 
 double loop_cilkified(double * a, double * b, int n)
 {
-	return 0;
+  int outer, inner;
+  int npercourseness = n / COURSENESS;
+  int inneridx;
+  double sum = 0.0;
+  double prods[n];
+
+  // schedule segments of the vectors to be multiplied in parallel
+  cilk_for(outer = 0; outer < npercourseness; ++outer)
+  {
+    for(inner = 0; inner < COURSENESS; ++inner)
+    {
+      inneridx = (outer * COURSENESS) + inner;
+
+      prods[inneridx] = a[inneridx] * b[inneridx];
+    }
+  }
+
+  // sum the products in serial
+  for(outer = 0; outer < n; ++outer)
+  {
+    sum += prods[outer];
+  }
+
+	return sum;
 }
 
 

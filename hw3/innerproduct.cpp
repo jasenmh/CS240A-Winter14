@@ -75,7 +75,15 @@ double loop_cilkified(double * a, double * b, int n)
 
 double hyperobject_cilkified(double * a, double * b, int n)
 {
-        return 0;
+  cilk::hyperobject<cilk::reducer_opadd<double> > sum;
+  int i;
+
+  cilk_for(i = 0; i < n; ++i)
+  {
+    sum += a[i] * b[i];
+  }
+
+  return sum.get_value();
 }
 
 

@@ -1,3 +1,5 @@
+// Jasen Hall and Kyle Jorgensen, Assignment 3 for CS240A, 1 Feb 2014
+
 #include <cilk/cilk.h>
 #include <cilk/reducer_opadd.h>
 

@@ -43,10 +43,15 @@ double rec_cilkified(double * a, double * b, int n)
 double loop_cilkified(double * a, double * b, int n)
 {
   int npercoarseness = n / COARSENESS;
+  int remainder = n % COARSENESS;
   int inneridx;
   double sum = 0.0;
   // create a new array initialized with zeros
   double * partialProd = new double[npercoarseness]();
+  double * extraPartialProd;
+
+  if (remainder != 0) // if n is not a factor of the coarseness, we need an extra array
+  	extraPartialProd = new double[remainder]();
 
   // schedule segments of the vectors to be multiplied in parallel
   cilk_for(int outer = 0; outer < npercoarseness; ++outer)
@@ -59,10 +64,19 @@ double loop_cilkified(double * a, double * b, int n)
     }
   }
 
+  if(remainder != 0) // compute the remainder of the arrays
+    cilk_for(int i = 1; i <= remainder; i++)
+      { extraPartialProd[i-1] += a[n-i] * b[n-i]; }
+
   // sum the products in serial
-  for(int outer = 0; outer < n; ++outer)
+  for(int outer = 0; outer < npercoarseness; ++outer)
   {
     sum += partialProd[outer];
+  }
+
+  for(int i = 0; i < remainder; ++i)
+  {
+  	sum += extraPartialProd[i];
   }
 
 	return sum;

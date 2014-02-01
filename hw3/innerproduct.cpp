@@ -71,15 +71,14 @@ double loop_cilkified(double * a, double * b, int n)
 
 double hyperobject_cilkified(double * a, double * b, int n)
 {
-  cilk::hyperobject<cilk::reducer_opadd<double> > sum;
-
+  cilk::reducer_opadd<double> parallel_sum;
 
   cilk_for(int i = 0; i < n; ++i)
   {
-    sum += a[i] * b[i];
+    parallel_sum += a[i] * b[i];
   }
 
-  return sum.get_value();
+  return parallel_sum.get_value();
 }
 
 

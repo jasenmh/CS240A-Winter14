@@ -24,13 +24,7 @@ double rec_cilkified(double * a, double * b, int n)
 
   if(n <= COARSENESS) // go serial
   {
-    suma = 0.0;
-
-    for(i = 0; i < n; ++i)
-    {
-      suma += a[i] * b[i];
-    }
-
+    suma = std::inner_product(a, a+n, b, 0);
     return suma;
   }
   else  // split and recurse

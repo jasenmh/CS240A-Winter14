@@ -13,7 +13,7 @@
 
 #include "example_util_gettime.h"
 
-#define COARSENESS 100
+#define COARSENESS 1000
 #define ITERS 10
 
 double rec_cilkified(double * a, double * b, int n)

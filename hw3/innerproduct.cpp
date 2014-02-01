@@ -60,7 +60,7 @@ double loop_cilkified(double * a, double * b, int n)
     {
       inneridx = (outer * COARSENESS) + inner;
 
-      partialProd[outer] = a[inneridx] * b[inneridx];
+      partialProd[outer] += a[inneridx] * b[inneridx];
     }
   }
 

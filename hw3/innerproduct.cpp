@@ -20,7 +20,7 @@ double rec_cilkified(double * a, double * b, int n)
   int i;
   double suma, sumb;
 
-  if(n <= COURSENESS) // go serial
+  if(n <= COARSENESS) // go serial
   {
     suma = 0.0;
 
@@ -46,18 +46,19 @@ double rec_cilkified(double * a, double * b, int n)
 
 double loop_cilkified(double * a, double * b, int n)
 {
-  int outer, inner;
-  int npercourseness = n / COURSENESS;
+  // int outer, 
+  int inner;
+  int npercourseness = n / COARSENESS;
   int inneridx;
   double sum = 0.0;
   double prods[n];
 
   // schedule segments of the vectors to be multiplied in parallel
-  cilk_for(outer = 0; outer < npercourseness; ++outer)
+  cilk_for(int outer = 0; outer < npercourseness; ++outer)
   {
-    for(inner = 0; inner < COURSENESS; ++inner)
+    for(inner = 0; inner < COARSENESS; ++inner)
     {
-      inneridx = (outer * COURSENESS) + inner;
+      inneridx = (outer * COARSENESS) + inner;
 
       prods[inneridx] = a[inneridx] * b[inneridx];
     }
@@ -76,9 +77,9 @@ double loop_cilkified(double * a, double * b, int n)
 double hyperobject_cilkified(double * a, double * b, int n)
 {
   cilk::hyperobject<cilk::reducer_opadd<double> > sum;
-  int i;
+  // int i;
 
-  cilk_for(i = 0; i < n; ++i)
+  cilk_for(int i = 0; i < n; ++i)
   {
     sum += a[i] * b[i];
   }

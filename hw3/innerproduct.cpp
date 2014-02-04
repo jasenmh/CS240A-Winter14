@@ -3,6 +3,7 @@
 #include <cilk/cilk.h>
 #include <cilk/reducer_opadd.h>
 #include <cilk/cilk_api.h>
+#include <cilk/cilkview.h>
 
 #include <algorithm>
 #include <numeric>
@@ -17,11 +18,15 @@
 #define COARSENESS 1000
 #define ITERS 10
 
+cilk::cilkview cv;
+
 double rec_cilkified(double * a, double * b, int n)
 {
   int split_on;
   int i;
   double suma, sumb;
+
+  cv.start();
 
   if(n <= COARSENESS) // go serial
   {
@@ -38,7 +43,10 @@ double rec_cilkified(double * a, double * b, int n)
     return suma + sumb;
   }
 
-	return 0;
+  cv.stop();
+  cv.dump("Recursive cilkified");
+
+  return 0;
 }
 
 double loop_cilkified(double * a, double * b, int n)
@@ -50,6 +58,8 @@ double loop_cilkified(double * a, double * b, int n)
   // create a new array initialized with zeros
   double * partialProd = new double[npercoarseness]();
   double * extraPartialProd;
+
+  cv.start();
 
   if (remainder != 0) // if n is not a factor of the coarseness, we need an extra array
   	extraPartialProd = new double[remainder]();
@@ -80,6 +90,9 @@ double loop_cilkified(double * a, double * b, int n)
   	sum += extraPartialProd[i];
   }
 
+  cv.stop();
+  cv.dump("Loop cilkified");
+
 	return sum;
 }
 
@@ -88,10 +101,15 @@ double hyperobject_cilkified(double * a, double * b, int n)
 {
   cilk::reducer_opadd<double> parallel_sum;
 
+  cv.start();
+
   cilk_for(int i = 0; i < n; ++i)
   {
     parallel_sum += a[i] * b[i];
   }
+
+  cv.stop();
+  cv.dump("Hyperobject cilkified");
 
   return parallel_sum.get_value();
 }

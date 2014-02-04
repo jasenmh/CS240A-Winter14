@@ -2,6 +2,7 @@
 
 #include <cilk/cilk.h>
 #include <cilk/reducer_opadd.h>
+#include <cilk/cilk_api.h>
 
 #include <algorithm>
 #include <numeric>
@@ -106,6 +107,8 @@ int close(double x, double y, int n)
 // A simple test harness 
 int inn_prod_driver(int n)
 {
+  __cilkrts_set_param("nworkers","4");
+
 	double * a = new double[n];
 	double * b = new double[n];
 	for (int i = 0; i < n; ++i)

@@ -3,7 +3,7 @@
 #include <cilk/cilk.h>
 #include <cilk/reducer_opadd.h>
 #include <cilk/cilk_api.h>
-#include <cilk/cilkview.h>
+#include <cilktools/cilkview.h>
 
 #include <algorithm>
 #include <numeric>

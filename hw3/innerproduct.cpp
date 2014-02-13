@@ -1,5 +1,8 @@
+// Jasen Hall and Kyle Jorgensen, Assignment 3 for CS240A, 1 Feb 2014
+
 #include <cilk/cilk.h>
 #include <cilk/reducer_opadd.h>
+#include <cilk/cilk_api.h>
 
 #include <algorithm>
 #include <numeric>
@@ -11,7 +14,7 @@
 
 #include "example_util_gettime.h"
 
-#define COARSENESS 100
+#define COARSENESS 1000
 #define ITERS 10
 
 double rec_cilkified(double * a, double * b, int n)
@@ -20,15 +23,9 @@ double rec_cilkified(double * a, double * b, int n)
   int i;
   double suma, sumb;
 
-  if(n <= COURSENESS) // go serial
+  if(n <= COARSENESS) // go serial
   {
-    suma = 0.0;
-
-    for(i = 0; i < n; ++i)
-    {
-      suma += a[i] * b[i];
-    }
-
+    suma = std::inner_product(a, a+n, b, (double)0);
     return suma;
   }
   else  // split and recurse
@@ -46,27 +43,41 @@ double rec_cilkified(double * a, double * b, int n)
 
 double loop_cilkified(double * a, double * b, int n)
 {
-  int outer, inner;
-  int npercourseness = n / COURSENESS;
+  int npercoarseness = n / COARSENESS;
+  int remainder = n % COARSENESS;
   int inneridx;
   double sum = 0.0;
-  double prods[n];
+  // create a new array initialized with zeros
+  double * partialProd = new double[npercoarseness]();
+  double * extraPartialProd;
+
+  if (remainder != 0) // if n is not a factor of the coarseness, we need an extra array
+  	extraPartialProd = new double[remainder]();
 
   // schedule segments of the vectors to be multiplied in parallel
-  cilk_for(outer = 0; outer < npercourseness; ++outer)
+  cilk_for(int outer = 0; outer < npercoarseness; ++outer)
   {
-    for(inner = 0; inner < COURSENESS; ++inner)
+    for(int inner = 0; inner < COARSENESS; ++inner)
     {
-      inneridx = (outer * COURSENESS) + inner;
+      inneridx = (outer * COARSENESS) + inner;
 
-      prods[inneridx] = a[inneridx] * b[inneridx];
+      partialProd[outer] += a[inneridx] * b[inneridx];
     }
   }
 
+  if(remainder != 0) // compute the remainder of the arrays
+    cilk_for(int i = 1; i <= remainder; i++)
+      { extraPartialProd[i-1] += a[n-i] * b[n-i]; }
+
   // sum the products in serial
-  for(outer = 0; outer < n; ++outer)
+  for(int outer = 0; outer < npercoarseness; ++outer)
   {
-    sum += prods[outer];
+    sum += partialProd[outer];
+  }
+
+  for(int i = 0; i < remainder; ++i)
+  {
+  	sum += extraPartialProd[i];
   }
 
 	return sum;
@@ -75,15 +86,14 @@ double loop_cilkified(double * a, double * b, int n)
 
 double hyperobject_cilkified(double * a, double * b, int n)
 {
-  cilk::hyperobject<cilk::reducer_opadd<double> > sum;
-  int i;
+  cilk::reducer_opadd<double> parallel_sum;
 
-  cilk_for(i = 0; i < n; ++i)
+  cilk_for(int i = 0; i < n; ++i)
   {
-    sum += a[i] * b[i];
+    parallel_sum += a[i] * b[i];
   }
 
-  return sum.get_value();
+  return parallel_sum.get_value();
 }
 
 
@@ -97,6 +107,8 @@ int close(double x, double y, int n)
 // A simple test harness 
 int inn_prod_driver(int n)
 {
+  __cilkrts_set_param("nworkers","4");
+
 	double * a = new double[n];
 	double * b = new double[n];
 	for (int i = 0; i < n; ++i)
@@ -107,12 +119,12 @@ int inn_prod_driver(int n)
     	std::random_shuffle(a, a + n);
 	std::random_shuffle(b, b + n);
 
-	double seqresult = std::inner_product(a, a+n, b, 0);	
+	double seqresult = std::inner_product(a, a+n, b, (double)0);	
 
 	long t1 = example_get_time();
 	for(int i=0; i< ITERS; ++i)
 	{
-		seqresult = std::inner_product(a, a+n, b, 0);	
+		seqresult = std::inner_product(a, a+n, b, (double)0);	
 	}
 	long t2 = example_get_time();
 

@@ -4,7 +4,7 @@
 
 #define MAX_THREADS 320
 
-int numnodesingraph;  // need to make this a global variable so reducer identity function can handle varying sized graphs
+int numvertsingraph;  // need to make this a global variable so reducer identity function can handle varying sized graphs
 
 typedef struct BC_reducer {
   double *betweenness;
@@ -14,8 +14,8 @@ void BC_initialize(BCR *bc)
 {
   int i;
 
-  bc->betweenness = (double *)malloc(numnodesingraph * sizeof(double));
-  for(i = 0; i < numnodesingraph; ++i)
+  bc->betweenness = (double *)malloc(numvertsingraph * sizeof(double));
+  for(i = 0; i < numvertsingraph; ++i)
   {
     bc->betweenness[i] = 0.0;
   }
@@ -36,10 +36,28 @@ void BC_combine(BCR *left, BCR *right)
 {
   int i;
 
-  for(i = 0; i < numnodesingraph; ++i)
+  for(i = 0; i < numvertsingraph; ++i)
   {
     left->betweenness[i] += right->betweenness[i];
   }
+
+  BC_cleanup(right);
+}
+
+void BC_centrality_update(BCR *bcr, int node, double cu)
+{
+  bcr->betweenness[node] += cu;
+}
+
+void BC_export_betweennessess(BCR *bcr, double *bc)
+{
+  int i;
+
+  for(i = 0; i < numvertsingraph; ++i)
+  {
+    bc[i] = bcr->betweenness[i];
+  }
+
 }
 
 void identity_wrapper(void *reducer, void *bcr)
@@ -72,8 +90,16 @@ double betweennessCentrality_parallel(graph* G, double* BC) {
   int i, j, k, p, count, myCount;
   int v, w, vert;
   int numV, num_traversals, n, m, phase_num;
+  int continueforever;
 
-  // TODO: create and register our custom reducer
+  // create and initialize our custom reducer
+  CILK_C_DECLARE_REDUCER(BCR) my_bcr =
+    CILK_C_INIT_REDUCER(BCR,
+      reducer_wrapper,
+      identity_wrapper,
+      destroy_wrapper);
+  numvertsingraph = G->nv;
+  BC_initialize(&REDUCER_VIEW(my_bcr));
 
   /* numV: no. of vertices to run BFS from = 2^K4approx */
   //numV = 1<<K4approx;
@@ -129,8 +155,15 @@ double betweennessCentrality_parallel(graph* G, double* BC) {
   /*** MAIN LOOP *********************/
   /***********************************/
 
-  // TODO: cilk_for this for loop
-  for (p=0; p<n; p++) {
+  // register our custom reducer
+  CILK_C_REGISTER_REDUCER(my_bcr);
+
+  continueforever = 0;
+
+  // cilk_for this for loop
+  //for (p=0; p<n; p++) {
+  cilk_for(p = 0; p < n; ++p)
+  {
 
 		i = Srcs[p];
 		if (G->firstnbr[i+1] - G->firstnbr[i] == 0) {
@@ -139,8 +172,11 @@ double betweennessCentrality_parallel(graph* G, double* BC) {
 			num_traversals++;
 		}
 
-		if (num_traversals == numV + 1) {
-			break;
+		if ((num_traversals == numV + 1) || continueforever) {
+      // can't break out of a cilk_for loop
+			//break;
+			continueforever = 1;
+      continue;
 		}
 		
 		sig[i] = 1;
@@ -198,8 +234,9 @@ double betweennessCentrality_parallel(graph* G, double* BC) {
 					v = P[w].list[k];
 					del[v] = del[v] + sig[v]*(1+del[w])/sig[w];
 				}
-        // TODO: replace this BC with our reducer
-				BC[w] += del[w];
+        // replace this BC with our reducer
+				//BC[w] += del[w];
+				BC_centrality_update(&REDUCER_VIEW(my_bcr), w, del[w]);
 			}
 
 			phase_num--;
@@ -212,14 +249,17 @@ double betweennessCentrality_parallel(graph* G, double* BC) {
 			P[w].count = 0;
 		}
   }
+
   /***********************************/
   /*** END OF MAIN LOOP **************/
   /***********************************/
 
-  // TODO: unregister reducer
-  // not sure on the required order of these two; experiment 
-  // TODO: copy the values from our reducer into BC
-	
+  // unregister reducer
+  CILK_C_UNREGISTER_REDUCER(my_bcr);
+
+  // copy the values from our reducer into BC
+	BC_export_betweennessess(&REDUCER_VIEW(my_bcr), BC);
+
   free(S);
   free(pListMem);
   free(P);

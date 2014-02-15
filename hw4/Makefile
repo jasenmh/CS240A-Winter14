@@ -1,6 +1,6 @@
 # Sequential makefile for BC
 CC = icc 
-CFLAGS = 
+CFLAGS = -g
 
 AR = ar
 ARFLAGS = cr

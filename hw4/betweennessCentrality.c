@@ -3,6 +3,7 @@
 #include <cilk/reducer_opadd.h>
 
 #define MAX_THREADS 320
+#define DEBUG 0
 
 int numvertsingraph;  // need to make this a global variable so reducer identity function can handle varying sized graphs
 
@@ -93,6 +94,7 @@ double betweennessCentrality_parallel(graph* G, double* BC) {
   int continueforever;
 
   // create and initialize our custom reducer
+if(DEBUG) printf("- creating and initializing reducer\n");
   CILK_C_DECLARE_REDUCER(BCR) my_bcr =
     CILK_C_INIT_REDUCER(BCR,
       reducer_wrapper,
@@ -156,6 +158,7 @@ double betweennessCentrality_parallel(graph* G, double* BC) {
   /***********************************/
 
   // register our custom reducer
+if(DEBUG) printf("- registering reducer\n");
   CILK_C_REGISTER_REDUCER(my_bcr);
 
   continueforever = 0;
@@ -236,6 +239,7 @@ double betweennessCentrality_parallel(graph* G, double* BC) {
 				}
         // replace this BC with our reducer
 				//BC[w] += del[w];
+if(DEBUG) printf("- updating centrality in reducer\n");
 				BC_centrality_update(&REDUCER_VIEW(my_bcr), w, del[w]);
 			}
 
@@ -255,9 +259,11 @@ double betweennessCentrality_parallel(graph* G, double* BC) {
   /***********************************/
 
   // unregister reducer
+if(DEBUG) printf("- unregistering reducer\n");
   CILK_C_UNREGISTER_REDUCER(my_bcr);
 
   // copy the values from our reducer into BC
+if(DEBUG) printf("- exporting betweennessess\n");
 	BC_export_betweennessess(&REDUCER_VIEW(my_bcr), BC);
 
   free(S);

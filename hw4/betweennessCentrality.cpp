@@ -7,13 +7,18 @@
 
 int numvertsingraph;  // need to make this a global variable so reducer identity function can handle varying sized graphs
 
-double *calculate_bc(G, Srcs,)
+void calculate_bc(graph *G, int *Srcs, int *S, double *sig,
+  int *d, double *del, int *start, int *end, plist *P, 
+  cilk::reducer_opadd<double> *array_of_reducers, int n, int m, int p, 
+  int num_traversals, int myCount, int v, int w)
 {
-	int i;
+	int i, j, k;
+  int count;
+  int phase_num;
 	
 		i = Srcs[p];
 		if (G->firstnbr[i+1] - G->firstnbr[i] == 0) {
-			continue;
+			return;
 		} else {
 			num_traversals++;
 		}
@@ -178,6 +183,8 @@ double betweennessCentrality_parallel(graph* G, double* BC) {
   //for (p=0; p<n; p++) {
   cilk_for(int p = 0; p < n; ++p)
   {
+    calculate_bc(G, Srcs, S, sig, d, del, start, end, P, 
+      array_of_reducers, n, m, p, num_traversals, myCount, v, w);
   }
 
   /***********************************/

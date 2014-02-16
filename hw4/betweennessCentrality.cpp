@@ -9,28 +9,22 @@ int numvertsingraph;  // need to make this a global variable so reducer identity
 
 void calculate_bc(graph *G, int *Srcs, int *S, double *sig,
   int *d, double *del, int *start, int *end, plist *P, 
-  cilk::reducer_opadd<double> *array_of_reducers, int n, int m, int p, 
-  int num_traversals, int myCount, int v, int w)
+  cilk::reducer_opadd<double> *array_of_reducers, int p, 
+  int *num_traversals)
 {
 	int i, j, k;
   int count;
   int phase_num;
+  int myCount;
+  int w, v;
 	
-		i = Srcs[p];
+  i = Srcs[p];
 		if (G->firstnbr[i+1] - G->firstnbr[i] == 0) {
 			return;
 		} else {
-			num_traversals++;
+			(*num_traversals)++;
 		}
 
-    // this situation should never happen...? 
-		// if ((num_traversals == numV + 1) || continueforever) {
-  //      can't break out of a cilk_for loop
-		// 	break;
-		// 	continueforever = 1;
-  //     continue;
-		// }
-		
 		sig[i] = 1;
 		d[i] = 0;
 		S[0] = i;
@@ -184,7 +178,7 @@ double betweennessCentrality_parallel(graph* G, double* BC) {
   cilk_for(int p = 0; p < n; ++p)
   {
     calculate_bc(G, Srcs, S, sig, d, del, start, end, P, 
-      array_of_reducers, n, m, p, num_traversals, myCount, v, w);
+      array_of_reducers, p, &num_traversals);
   }
 
   /***********************************/

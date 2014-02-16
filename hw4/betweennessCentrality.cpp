@@ -88,7 +88,7 @@ double betweennessCentrality_parallel(graph* G, double* BC) {
   int *start, *end;
   int seed = 2387;
   double elapsed_time;
-  int i, j, k, p, count, myCount;
+  int i, j, k, count, myCount;
   int v, w, vert;
   int numV, num_traversals, n, m, phase_num;
   int continueforever;
@@ -165,7 +165,7 @@ if(DEBUG) printf("- registering reducer\n");
 
   // cilk_for this for loop
   //for (p=0; p<n; p++) {
-  cilk_for(p = 0; p < n; ++p)
+  cilk_for(int p = 0; p < n; ++p)
   {
 
 		i = Srcs[p];

@@ -243,7 +243,7 @@ if(DEBUG) printf("- registering reducer\n");
 				}
         // replace this BC with our reducer
 				//BC[w] += del[w];
-        array_of_reducers[w] = array_of_reducers[w].get_value() + del[w];
+        array_of_reducers[w] += del[w];
 
 // if(DEBUG) printf("- updating centrality in reducer\n");
 // 				BC_centrality_update(&REDUCER_VIEW(my_bcr), w, del[w]);

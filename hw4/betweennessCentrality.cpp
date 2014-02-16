@@ -7,74 +7,74 @@
 
 int numvertsingraph;  // need to make this a global variable so reducer identity function can handle varying sized graphs
 
-typedef struct BC_reducer {
-  double *betweenness;
-} BCR;
+// typedef struct BC_reducer {
+//   double *betweenness;
+// } BCR;
 
-void BC_initialize(BCR *bc)
-{
-  int i;
+// void BC_initialize(BCR *bc)
+// {
+//   int i;
 
-  bc->betweenness = (double *)malloc(numvertsingraph * sizeof(double));
-  for(i = 0; i < numvertsingraph; ++i)
-  {
-    bc->betweenness[i] = 0.0;
-  }
-}
+//   bc->betweenness = (double *)malloc(numvertsingraph * sizeof(double));
+//   for(i = 0; i < numvertsingraph; ++i)
+//   {
+//     bc->betweenness[i] = 0.0;
+//   }
+// }
 
-void BC_cleanup(BCR *bc)
-{
-  if(bc == NULL)
-    return;
+// void BC_cleanup(BCR *bc)
+// {
+//   if(bc == NULL)
+//     return;
 
-  if(bc->betweenness != NULL)
-    free(bc->betweenness);
+//   if(bc->betweenness != NULL)
+//     free(bc->betweenness);
 
-  free(bc);
-}
+//   free(bc);
+// }
 
-void BC_combine(BCR *left, BCR *right)
-{
-  int i;
+// void BC_combine(BCR *left, BCR *right)
+// {
+//   int i;
 
-  for(i = 0; i < numvertsingraph; ++i)
-  {
-    left->betweenness[i] += right->betweenness[i];
-  }
+//   for(i = 0; i < numvertsingraph; ++i)
+//   {
+//     left->betweenness[i] += right->betweenness[i];
+//   }
 
-  BC_cleanup(right);
-}
+//   BC_cleanup(right);
+// }
 
-void BC_centrality_update(BCR *bcr, int node, double cu)
-{
-  bcr->betweenness[node] += cu;
-}
+// void BC_centrality_update(BCR *bcr, int node, double cu)
+// {
+//   bcr->betweenness[node] += cu;
+// }
 
-void BC_export_betweennessess(BCR *bcr, double *bc)
-{
-  int i;
+// void BC_export_betweennessess(BCR *bcr, double *bc)
+// {
+//   int i;
 
-  for(i = 0; i < numvertsingraph; ++i)
-  {
-    bc[i] = bcr->betweenness[i];
-  }
+//   for(i = 0; i < numvertsingraph; ++i)
+//   {
+//     bc[i] = bcr->betweenness[i];
+//   }
 
-}
+// }
 
-void identity_wrapper(void *reducer, void *bcr)
-{
-  BC_initialize((BCR *)bcr);
-}
+// void identity_wrapper(void *reducer, void *bcr)
+// {
+//   BC_initialize((BCR *)bcr);
+// }
 
-void reducer_wrapper(void *reducer, void *left, void *right)
-{
-  BC_combine((BCR *)left, (BCR *)right);
-}
+// void reducer_wrapper(void *reducer, void *left, void *right)
+// {
+//   BC_combine((BCR *)left, (BCR *)right);
+// }
 
-void destroy_wrapper(void *reducer, void *p)
-{
-  BC_cleanup((BCR *)p);
-}
+// void destroy_wrapper(void *reducer, void *p)
+// {
+//   BC_cleanup((BCR *)p);
+// }
 
 double betweennessCentrality_parallel(graph* G, double* BC) {
   int *S; 	/* stack of vertices in order of distance from s. Also, implicitly, the BFS queue */
@@ -93,17 +93,18 @@ double betweennessCentrality_parallel(graph* G, double* BC) {
   int numV, num_traversals, n, m, phase_num;
   int continueforever;
 
+  // make an array of reducers, one reducer for each vertex in the graph
   cilk::reducer_opadd<double> *array_of_reducers = new cilk::reducer_opadd<double>[G->nv];
 
   // create and initialize our custom reducer
-if(DEBUG) printf("- creating and initializing reducer\n");
-  CILK_C_DECLARE_REDUCER(BCR) my_bcr =
-    CILK_C_INIT_REDUCER(BCR,
-      reducer_wrapper,
-      identity_wrapper,
-      destroy_wrapper);
-  numvertsingraph = G->nv;
-  BC_initialize(&REDUCER_VIEW(my_bcr));
+//if(DEBUG) printf("- creating and initializing reducer\n");
+  // CILK_C_DECLARE_REDUCER(BCR) my_bcr =
+  //   CILK_C_INIT_REDUCER(BCR,
+  //     reducer_wrapper,
+  //     identity_wrapper,
+  //     destroy_wrapper);
+  // numvertsingraph = G->nv;
+  // BC_initialize(&REDUCER_VIEW(my_bcr));
 
   /* numV: no. of vertices to run BFS from = 2^K4approx */
   //numV = 1<<K4approx;
@@ -241,8 +242,10 @@ if(DEBUG) printf("- registering reducer\n");
 				}
         // replace this BC with our reducer
 				//BC[w] += del[w];
-if(DEBUG) printf("- updating centrality in reducer\n");
-				BC_centrality_update(&REDUCER_VIEW(my_bcr), w, del[w]);
+        array_of_reducers[w] = array_of_reducers[w].get_value() + del[w];
+
+// if(DEBUG) printf("- updating centrality in reducer\n");
+// 				BC_centrality_update(&REDUCER_VIEW(my_bcr), w, del[w]);
 			}
 
 			phase_num--;
@@ -261,12 +264,16 @@ if(DEBUG) printf("- updating centrality in reducer\n");
   /***********************************/
 
   // unregister reducer
-if(DEBUG) printf("- unregistering reducer\n");
-  CILK_C_UNREGISTER_REDUCER(my_bcr);
+// if(DEBUG) printf("- unregistering reducer\n");
+//   CILK_C_UNREGISTER_REDUCER(my_bcr);
 
   // copy the values from our reducer into BC
 if(DEBUG) printf("- exporting betweennessess\n");
-	BC_export_betweennessess(&REDUCER_VIEW(my_bcr), BC);
+  for (int i = 0; i < n; ++i)
+  {
+    BC[i] = array_of_reducers[i].get_value();
+  }
+// 	BC_export_betweennessess(&REDUCER_VIEW(my_bcr), BC);
 
   free(S);
   free(pListMem);

@@ -93,6 +93,8 @@ double betweennessCentrality_parallel(graph* G, double* BC) {
   int numV, num_traversals, n, m, phase_num;
   int continueforever;
 
+  cilk::reducer_opadd<double> *array_of_reducers = new cilk::reducer_opadd<double>[G->nv];
+
   // create and initialize our custom reducer
 if(DEBUG) printf("- creating and initializing reducer\n");
   CILK_C_DECLARE_REDUCER(BCR) my_bcr =

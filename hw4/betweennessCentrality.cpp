@@ -162,9 +162,9 @@ double betweennessCentrality_parallel(graph* G, double* BC) {
 
   // register our custom reducer
 if(DEBUG) printf("- registering reducer\n");
-  CILK_C_REGISTER_REDUCER(my_bcr);
+//  CILK_C_REGISTER_REDUCER(my_bcr);
 
-  continueforever = 0;
+  //continueforever = 0;
 
   // cilk_for this for loop
   //for (p=0; p<n; p++) {
@@ -178,12 +178,13 @@ if(DEBUG) printf("- registering reducer\n");
 			num_traversals++;
 		}
 
-		if ((num_traversals == numV + 1) || continueforever) {
-      // can't break out of a cilk_for loop
-			//break;
-			continueforever = 1;
-      continue;
-		}
+    // this situation should never happen...? 
+		// if ((num_traversals == numV + 1) || continueforever) {
+  //      can't break out of a cilk_for loop
+		// 	break;
+		// 	continueforever = 1;
+  //     continue;
+		// }
 		
 		sig[i] = 1;
 		d[i] = 0;
@@ -372,6 +373,7 @@ double betweennessCentrality_serial(graph* G, double* BC) {
 			num_traversals++;
 		}
 
+    // this situation should never happen...? 
 		if (num_traversals == numV + 1) {
 			break;
 		}

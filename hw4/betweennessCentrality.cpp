@@ -7,170 +7,10 @@
 
 int numvertsingraph;  // need to make this a global variable so reducer identity function can handle varying sized graphs
 
-// typedef struct BC_reducer {
-//   double *betweenness;
-// } BCR;
-
-// void BC_initialize(BCR *bc)
-// {
-//   int i;
-
-//   bc->betweenness = (double *)malloc(numvertsingraph * sizeof(double));
-//   for(i = 0; i < numvertsingraph; ++i)
-//   {
-//     bc->betweenness[i] = 0.0;
-//   }
-// }
-
-// void BC_cleanup(BCR *bc)
-// {
-//   if(bc == NULL)
-//     return;
-
-//   if(bc->betweenness != NULL)
-//     free(bc->betweenness);
-
-//   free(bc);
-// }
-
-// void BC_combine(BCR *left, BCR *right)
-// {
-//   int i;
-
-//   for(i = 0; i < numvertsingraph; ++i)
-//   {
-//     left->betweenness[i] += right->betweenness[i];
-//   }
-
-//   BC_cleanup(right);
-// }
-
-// void BC_centrality_update(BCR *bcr, int node, double cu)
-// {
-//   bcr->betweenness[node] += cu;
-// }
-
-// void BC_export_betweennessess(BCR *bcr, double *bc)
-// {
-//   int i;
-
-//   for(i = 0; i < numvertsingraph; ++i)
-//   {
-//     bc[i] = bcr->betweenness[i];
-//   }
-
-// }
-
-// void identity_wrapper(void *reducer, void *bcr)
-// {
-//   BC_initialize((BCR *)bcr);
-// }
-
-// void reducer_wrapper(void *reducer, void *left, void *right)
-// {
-//   BC_combine((BCR *)left, (BCR *)right);
-// }
-
-// void destroy_wrapper(void *reducer, void *p)
-// {
-//   BC_cleanup((BCR *)p);
-// }
-
-double betweennessCentrality_parallel(graph* G, double* BC) {
-  int *S; 	/* stack of vertices in order of distance from s. Also, implicitly, the BFS queue */
-  plist* P;  	/* predecessors of vertex v on shortest paths from s */
-  double* sig; 	/* No. of shortest paths */
-  int* d; 	/* Length of the shortest path between every pair */
-  double* del; 	/* dependency of vertices */
-  int *in_degree, *numEdges;
-  int *pListMem;	
-  int* Srcs; 
-  int *start, *end;
-  int seed = 2387;
-  double elapsed_time;
-  int i, j, k, count, myCount;
-  int v, w, vert;
-  int numV, num_traversals, n, m, phase_num;
-  int continueforever;
-
-  // make an array of reducers, one reducer for each vertex in the graph
-  cilk::reducer_opadd<double> *array_of_reducers = new cilk::reducer_opadd<double>[G->nv];
-
-  // create and initialize our custom reducer
-//if(DEBUG) printf("- creating and initializing reducer\n");
-  // CILK_C_DECLARE_REDUCER(BCR) my_bcr =
-  //   CILK_C_INIT_REDUCER(BCR,
-  //     reducer_wrapper,
-  //     identity_wrapper,
-  //     destroy_wrapper);
-  // numvertsingraph = G->nv;
-  // BC_initialize(&REDUCER_VIEW(my_bcr));
-
-  /* numV: no. of vertices to run BFS from = 2^K4approx */
-  //numV = 1<<K4approx;
-  n = G->nv;
-  m = G->ne;
-  numV = n;
-
-  /* Permute vertices */
-  Srcs = (int *) malloc(n*sizeof(int));
-  for (i=0; i<n; i++) {
-    Srcs[i] = i;
-  }
-
-  /* Start timing code from here */
-  elapsed_time = get_seconds();
-
-  /* Initialize predecessor lists */
-  /* Number of predecessors of a vertex is at most its in-degree. */
-  P = (plist *) calloc(n, sizeof(plist));
-  in_degree = (int *) calloc(n+1, sizeof(int));
-  numEdges = (int *) malloc((n+1)*sizeof(int));
-  for (i=0; i<m; i++) {
-    v = G->nbr[i];
-    in_degree[v]++;
-  }
-  prefix_sums(in_degree, numEdges, n);
-  pListMem = (int *) malloc(m*sizeof(int));
-  for (i=0; i<n; i++) {
-    P[i].list = pListMem + numEdges[i];
-    P[i].degree = in_degree[i];
-    P[i].count = 0;
-  }
-  free(in_degree);
-  free(numEdges);
+double *calculate_bc(G, Srcs,)
+{
+	int i;
 	
-  /* Allocate shared memory */ 
-  S   = (int *) malloc(n*sizeof(int));
-  sig = (double *) malloc(n*sizeof(double));
-  d   = (int *) malloc(n*sizeof(int));
-  del = (double *) calloc(n, sizeof(double));
-	
-  start = (int *) malloc(n*sizeof(int));
-  end = (int *) malloc(n*sizeof(int));
-
-  num_traversals = 0;
-  myCount = 0;
-
-  for (i=0; i<n; i++) {
-    d[i] = -1;
-  }
-	
-  /***********************************/
-  /*** MAIN LOOP *********************/
-  /***********************************/
-
-  // register our custom reducer
-if(DEBUG) printf("- registering reducer\n");
-//  CILK_C_REGISTER_REDUCER(my_bcr);
-
-  //continueforever = 0;
-
-  // cilk_for this for loop
-  //for (p=0; p<n; p++) {
-  cilk_for(int p = 0; p < n; ++p)
-  {
-
 		i = Srcs[p];
 		if (G->firstnbr[i+1] - G->firstnbr[i] == 0) {
 			continue;
@@ -258,6 +98,86 @@ if(DEBUG) printf("- registering reducer\n");
 			del[w] = 0;
 			P[w].count = 0;
 		}
+}
+
+double betweennessCentrality_parallel(graph* G, double* BC) {
+  int *S; 	/* stack of vertices in order of distance from s. Also, implicitly, the BFS queue */
+  plist* P;  	/* predecessors of vertex v on shortest paths from s */
+  double* sig; 	/* No. of shortest paths */
+  int* d; 	/* Length of the shortest path between every pair */
+  double* del; 	/* dependency of vertices */
+  int *in_degree, *numEdges;
+  int *pListMem;	
+  int* Srcs; 
+  int *start, *end;
+  int seed = 2387;
+  double elapsed_time;
+  int i, j, k, count, myCount;
+  int v, w, vert;
+  int numV, num_traversals, n, m, phase_num;
+  int continueforever;
+
+  // make an array of reducers, one reducer for each vertex in the graph
+  cilk::reducer_opadd<double> *array_of_reducers = new cilk::reducer_opadd<double>[G->nv];
+
+  /* numV: no. of vertices to run BFS from = 2^K4approx */
+  //numV = 1<<K4approx;
+  n = G->nv;
+  m = G->ne;
+  numV = n;
+
+  /* Permute vertices */
+  Srcs = (int *) malloc(n*sizeof(int));
+  for (i=0; i<n; i++) {
+    Srcs[i] = i;
+  }
+
+  /* Start timing code from here */
+  elapsed_time = get_seconds();
+
+  /* Initialize predecessor lists */
+  /* Number of predecessors of a vertex is at most its in-degree. */
+  P = (plist *) calloc(n, sizeof(plist));
+  in_degree = (int *) calloc(n+1, sizeof(int));
+  numEdges = (int *) malloc((n+1)*sizeof(int));
+  for (i=0; i<m; i++) {
+    v = G->nbr[i];
+    in_degree[v]++;
+  }
+  prefix_sums(in_degree, numEdges, n);
+  pListMem = (int *) malloc(m*sizeof(int));
+  for (i=0; i<n; i++) {
+    P[i].list = pListMem + numEdges[i];
+    P[i].degree = in_degree[i];
+    P[i].count = 0;
+  }
+  free(in_degree);
+  free(numEdges);
+	
+  /* Allocate shared memory */ 
+  S   = (int *) malloc(n*sizeof(int));
+  sig = (double *) malloc(n*sizeof(double));
+  d   = (int *) malloc(n*sizeof(int));
+  del = (double *) calloc(n, sizeof(double));
+	
+  start = (int *) malloc(n*sizeof(int));
+  end = (int *) malloc(n*sizeof(int));
+
+  num_traversals = 0;
+  myCount = 0;
+
+  for (i=0; i<n; i++) {
+    d[i] = -1;
+  }
+	
+  /***********************************/
+  /*** MAIN LOOP *********************/
+  /***********************************/
+
+  // cilk_for this for loop
+  //for (p=0; p<n; p++) {
+  cilk_for(int p = 0; p < n; ++p)
+  {
   }
 
   /***********************************/

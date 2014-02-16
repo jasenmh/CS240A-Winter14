@@ -35,7 +35,6 @@ int main( int argc, char* argv[] ) {
 	int niters = 0;
 	double norm;
 	double* b;
-	double* x;
 	double time;
 	double t1, t2;
 	int correct;
@@ -62,10 +61,12 @@ int main( int argc, char* argv[] ) {
 	t1 = MPI_Wtime();
 	
 	// CG Solve here!
-	double x_initial[n];
-	x = x_initial;
-	cgsolve(x, &niters, &norm, n);
-	
+	//double x_initial[n];
+	double *x=NULL;
+	//x = x_initial;
+if(DEBUG) printf("-calling cgsolve\n");
+	x = cgsolve(x, &niters, &norm, n);
+if(DEBUG) printf("-exited cgsolve\n");	
 	// End Timer
 	t2 = MPI_Wtime();
 	
@@ -125,8 +126,15 @@ double *cgsolve(double *x, int *iter, double *norm, int n)
   double normb;
   int i;
 
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
+if(DEBUG) printf("-started cgsolve\n");
+  if(rank == 0)
+  {
+    x = (double *)malloc(sizeof(double) * n);
+    for(i = 0; i < n; ++i)
+    {
+      x[i] = 0.0;
+    }
+  }
 
   // initialize our vectors
   for(i = 0; i < n; ++i)
@@ -140,11 +148,13 @@ double *cgsolve(double *x, int *iter, double *norm, int n)
   rtr = ddot(r, r, n);
   relres = 1.0;
 
+
   // loop until we have a sufficiently correct approximation
   while(relres > TARGRES && niters < MAXITERS)
   {
     ++niters;
     matvec(Ad, d, n);
+if(DEBUG) printf("-left matvec\n");
     alpha = rtr / ddot(d, Ad, n);
     daxpy(x, d, 1, alpha, n);
     daxpy(r, Ad, 1, -alpha, n);
@@ -249,6 +259,7 @@ void daxpy(double *v, double *w, double scalar1, double scalar2, int n)
 #endif
 }
 
+
 // calculate the matrix/vector product
 void matvec(double *v, double *w, int n)
 {
@@ -280,39 +291,39 @@ void matvec(double *v, double *w, int n)
     // even send/recv up, odd recv/send down
     if(rank % 2 == 0) // even
       {
-      	// send first row of real data (+ k)
-      	MPI_Send(subset_w + k, k, MPI_DOUBLE, upneighbor, 1, MPI_COMM_WORLD);
-      	// recv first row of ghost data (+ 0)
-      	MPI_Recv(subset_w, k, MPI_DOUBLE, upneighbor, 2, MPI_COMM_WORLD,
-      		 &status);
+        // send first row of real data (+ k)
+        MPI_Send(subset_w + k, k, MPI_DOUBLE, upneighbor, 1, MPI_COMM_WORLD);
+        // recv first row of ghost data (+ 0)
+        MPI_Recv(subset_w, k, MPI_DOUBLE, upneighbor, 2, MPI_COMM_WORLD,
+           &status);
       }
     else  // odd
       {
-      	// recv last row of ghost data (+ cellsperproc + k)
-      	MPI_Recv(subset_w + (cellsperproc + k), k, MPI_DOUBLE, downneighbor,
-      		 1, MPI_COMM_WORLD, &status);
-      	// send last row of real data (+ cellsperproc)
-      	MPI_Send(subset_w + cellsperproc, k, MPI_DOUBLE, downneighbor, 2,
-      		 MPI_COMM_WORLD);
+        // recv last row of ghost data (+ cellsperproc + k)
+        MPI_Recv(subset_w + (cellsperproc + k), k, MPI_DOUBLE, downneighbor,
+           1, MPI_COMM_WORLD, &status);
+        // send last row of real data (+ cellsperproc)
+        MPI_Send(subset_w + cellsperproc, k, MPI_DOUBLE, downneighbor, 2,
+           MPI_COMM_WORLD);
       }
     
     // even send/recv down, odd recv/send up
     if(rank % 2 == 0) // even
       {
-      	// send last row of real data (+ cellsperproc)
-      	MPI_Send(subset_w + cellsperproc, k, MPI_DOUBLE, downneighbor, 3,
-      		 MPI_COMM_WORLD);
-      	// recv last row of ghost data (+ cellsperproc + k)
-      	MPI_Recv(subset_w + (cellsperproc + k), k, MPI_DOUBLE, downneighbor,
-      		 4, MPI_COMM_WORLD, &status);
+        // send last row of real data (+ cellsperproc)
+        MPI_Send(subset_w + cellsperproc, k, MPI_DOUBLE, downneighbor, 3,
+           MPI_COMM_WORLD);
+        // recv last row of ghost data (+ cellsperproc + k)
+        MPI_Recv(subset_w + (cellsperproc + k), k, MPI_DOUBLE, downneighbor,
+           4, MPI_COMM_WORLD, &status);
       }
     else  // odd
       {
-      	// recv first row of ghost data (+ 0)
-      	MPI_Recv(subset_w, k, MPI_DOUBLE, upneighbor, 3, MPI_COMM_WORLD,
-      		 &status);
-      	// send first row of real data (+ k)
-      	MPI_Send(subset_w + k, k, MPI_DOUBLE, upneighbor, 4, MPI_COMM_WORLD);
+        // recv first row of ghost data (+ 0)
+        MPI_Recv(subset_w, k, MPI_DOUBLE, upneighbor, 3, MPI_COMM_WORLD,
+           &status);
+        // send first row of real data (+ k)
+        MPI_Send(subset_w + k, k, MPI_DOUBLE, upneighbor, 4, MPI_COMM_WORLD);
       }
   }
 

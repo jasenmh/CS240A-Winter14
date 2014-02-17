@@ -1,4 +1,5 @@
 CC = mpicc
+#CC=taucc
 CFLAGS =
 LIBS = -lm
 OBJECTS = main.o hw2harness.o

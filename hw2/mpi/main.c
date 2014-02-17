@@ -1,9 +1,9 @@
 /* UCSB CS240A, Winter Quarter 2014
  * Main and supporting functions for the Conjugate Gradient Solver on a 5-point stencil
  *
- * NAMES:
- * PERMS:
- * DATE:
+ * NAMES: Kyle Jorgensen and Jasen Hall
+ * PERMS: 4165916 and 8408742
+ * DATE: 28 January 2014
  */
 #include "mpi.h"
 #include "hw2harness.h"
@@ -11,14 +11,20 @@
 #include <stdlib.h>
 #include <math.h>
 
-#define DEBUG 1
+#define DEBUG 0   // 1 enables debug messages
+#define PDDOT 1   // these 3 variables enable parallel implementations when set to 1
+#define PDAXPY 1
+#define PMATVEC 1
+
+#define MAXITERSLIMIT 1000  // change to set iteration limits for experiments
 
 double* load_vec( char* filename, int* k );
 void save_vec( int k, double* x );
+/* The functions below are written by the team */
 double *cgsolve(double *x, int* i, double* norm, int n);
 double ddot(double *v, double *w, int n);
 void matvec(double *v, double *w, int n);
-void daxpy(double *v, const double *w, double alpha, double beta, int n);
+void daxpy(double *v, double *w, double alpha, double beta, int n);
 
 int rank, nprocs;
 
@@ -51,9 +57,6 @@ int main( int argc, char* argv[] ) {
 	}
 	writeOutX = atoi( argv[argc-1] ); // Write X to file if true, do not write if unspecified.
 
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
-
 	// Start Timer
 	t1 = MPI_Wtime();
 	
@@ -72,29 +75,26 @@ if(DEBUG) printf("-exited cgsolve\n");
 	}
 		
 	// Output
-	printf( "Problem size (k): %d\n",k);
-	if(niters > 0) {
-	  printf( "Norm of the residual after %d iterations: %lf\n", niters, norm);
-	}
-	printf( "Elapsed time during CGSOLVE: %lf\n", t2-t1);
+	if(rank == 0)
+  {
+  	printf( "Problem size (k): %d\n",k);
+  	if(niters > 0) {
+  	  printf( "Norm of the residual after %d iterations: %lf\n", niters, norm);
+  	}
+  	printf( "Elapsed time during CGSOLVE: %lf\n", t2-t1);
 
-  if(rank == 0)
-    if(x == NULL)
-      printf("-x == NULL\n");
-    else
-	    correct = cs240_verify(x, k, t2-t1);
-  else
-    printf("-only rank 0 verifies\n");
+  	correct = cs240_verify(x, k, t2-t1);
 
-	printf("Correct: %d\n", correct);
+  	printf("Correct: %d\n", correct);
+  }
 	
 	// Deallocate 
 	
-	// if(niters > 0)
-	//   free(b);
+  //if(niters > 0)
+  //  free(b);
 
-	if(rank == 0 && niters > 0)
-	  free(x);
+	//if(niters > 0)
+	//  free(x);
 	
 	MPI_Finalize();
 	
@@ -106,11 +106,14 @@ if(DEBUG) printf("-exited cgsolve\n");
  *
  */
 
+/*
+ *  cgsolve() returns the approximation
+ */
 double *cgsolve(double *x, int *iter, double *norm, int n)
 {
   int niters = 0;   // number of iterations
   int possmax = 5*sqrt(n);  // possible max. iterations
-  int MAXITERS = (1000 > possmax) ? 1000 : possmax;
+  int MAXITERS = (MAXITERSLIMIT > possmax) ? MAXITERSLIMIT : possmax;
   double TARGRES = 1.0e-6;  // target residual
   double relres;  // relative residual
   //double *x;  // vector that we are solving for
@@ -122,7 +125,6 @@ double *cgsolve(double *x, int *iter, double *norm, int n)
   double rtrold;
   double normb;
   int i;
-  int numrows;
 
 if(DEBUG) printf("-started cgsolve\n");
   if(rank == 0)
@@ -134,19 +136,20 @@ if(DEBUG) printf("-started cgsolve\n");
     }
   }
 
-  numrows = n/nprocs;
-
-if(DEBUG) printf("-initing arrays\n");
-  for(i = 0; i < numrows; ++i)
+  // initialize our vectors
+  for(i = 0; i < n; ++i)
   {
-    r[i] = d[i] = cs240_getB(i + rank*numrows, n);
+    x[i] = 0;
+    r[i] = d[i] = cs240_getB(i, n);
   }
- 
+
+  // initialize scalars 
   normb = sqrt(ddot(r, r, n));
   rtr = ddot(r, r, n);
   relres = 1.0;
 
-if(DEBUG) printf("-starting main loop\n");
+
+  // loop until we have a sufficiently correct approximation
   while(relres > TARGRES && niters < MAXITERS)
   {
     ++niters;
@@ -160,9 +163,9 @@ if(DEBUG) printf("-left matvec\n");
     beta = rtr / rtrold;
     daxpy(d, r, beta, 1, n);
     relres = sqrt(rtr) / normb;
+    // send relres to all nodes so they can make while() tests
+    MPI_Bcast(&relres, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
   }
-
-if(DEBUG) printf("niters is %d\n", niters);
 
   // returning values to be printed after a run
   *iter = niters;
@@ -171,123 +174,220 @@ if(DEBUG) printf("niters is %d\n", niters);
   return x;
 }
 
+// returns scalar dot product of two vectors
 double ddot(double *v, double *w, int n)
 {
   double prod = 0.0;
   int i;
+#if PDDOT == 1  // parallel implementation
+  double prodsum = 0.0;
+  int cellsperproc = n/nprocs;
+  double subset_v[cellsperproc];  // local storage for our portion
+  double subset_w[cellsperproc];  // of the v and w vectors
 
+  // give all nodes a piece of the vectors
+  MPI_Scatter(v, cellsperproc, MPI_DOUBLE, subset_v, cellsperproc, MPI_DOUBLE,
+    0, MPI_COMM_WORLD);
+  MPI_Scatter(w, cellsperproc, MPI_DOUBLE, subset_w, cellsperproc, MPI_DOUBLE,
+    0, MPI_COMM_WORLD);
+
+  for(i = 0; i < cellsperproc; ++i)
+  {
+    prod += subset_v[i] * subset_w[i];
+  }
+
+  // retrieve vector subsets
+  MPI_Reduce(&prod, &prodsum, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+
+  return prodsum;
+#else // serial implementation
   for(i = 0; i < n; ++i)
   {
     prod += v[i] * w[i];
   }
 
   return prod;
+#endif
 }
 
 // Overwrites vector v with scalar1*v + scalar2*w
-void daxpy(double *v, const double *w, double scalar1, double scalar2, int n)
+void daxpy(double *v, double *w, double scalar1, double scalar2, int n)
 {
-
-  /* To parallelize - broadcast the scalars scalar1 and scalar2,
-   * then split up the loop computation for the portions of v and w 
-   * that you need, and combine the result at the end.
-   */
-
   int i;
+#if PDAXPY == 1 // parallel implementation
+  double localscalar1, localscalar2;  // local copy of scalars
+  int cellsperproc = n/nprocs;
+  double subset_v[cellsperproc];  // local copy of vectors
+  double subset_w[cellsperproc];
+
+  // distribute subset of vectors to all nodes
+  MPI_Scatter(v, cellsperproc, MPI_DOUBLE, subset_v, cellsperproc, MPI_DOUBLE,
+    0, MPI_COMM_WORLD);
+  MPI_Scatter(w, cellsperproc, MPI_DOUBLE, subset_w, cellsperproc, MPI_DOUBLE,
+    0, MPI_COMM_WORLD);
+  if(rank == 0)
+  {
+    localscalar1 = scalar1;
+    localscalar2 = scalar2;
+  }
+  // Broadcast the scalars from proc 0 so that everyone is computing with the 
+  // correct values of alpha and beta
+  MPI_Bcast(&localscalar1, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+  MPI_Bcast(&localscalar2, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+  for(i = 0; i < cellsperproc; ++i)
+  {
+    subset_v[i] = subset_v[i]*localscalar1 + subset_w[i]*localscalar2;
+  }
+
+  // Processor 0 receives all the subset_v data from everyone, and then puts it in v
+  if(rank == 0)
+  {
+    MPI_Gather(subset_v, cellsperproc, MPI_DOUBLE, v, cellsperproc, MPI_DOUBLE,
+      0, MPI_COMM_WORLD);
+  }
+  else  // Everyone else just sends its subset_v data to proc 0
+  {
+    MPI_Gather(subset_v, cellsperproc, MPI_DOUBLE, NULL, cellsperproc,
+      MPI_DOUBLE, 0, MPI_COMM_WORLD);
+  }
+#else // serial implementation
   for(i = 0; i < n; i++)
   {
     v[i] = v[i]*scalar1 + w[i]*scalar2;
   }
+#endif
 }
 
+
+// calculate the matrix/vector product
 void matvec(double *v, double *w, int n)
 {
   int k = (int)sqrt(n);
   int i;
   int r, s;   //row, column
-  double *subset_w, *subset_v;
-  int nperproc = n/nprocs;
-  int kperproc = k/nprocs;
+#if PMATVEC == 1  // parallel implementation
+  int cellsperproc = n / nprocs;
+  int rowsperproc = cellsperproc / k;
+
+  // These subset vectors store an extra 2*k amount of data because they store
+  // one ghost row above and below their own set of rows.  
+  double subset_v[cellsperproc + (2*k)]; 
+  double subset_w[cellsperproc + (2*k)]; 
+  int upneighbor, downneighbor; // neighbor nodes
   MPI_Status status;
 
-/*
-  for(i = 0; i < n; ++i)
-  {
-    v[i] = 0.0;
-  }
-*/
-  // arrays are 2k larger than we need to accomodate ghost cells from
-  // neighbors
-if(DEBUG) printf("-initing subsets\n");
-  subset_w = (double *)malloc(sizeof(double) * (nperproc + 2*k));
-  subset_v = (double *)malloc(sizeof(double) * (nperproc + 2*k));
+  // Scatter the w vector on proc 0 to each processor's subset_w vector
+  MPI_Scatter(w, cellsperproc, MPI_DOUBLE, subset_w + k, cellsperproc,
+    MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
-if(DEBUG) printf("-size of subset arrays is %d\n", nperproc + 2*k);
-  //double subset_v[4224];
-  //double subset_w[4224];
+  // figure out comm partners for this processor
+  // top and bottom processors will exchange data they don't use
+  upneighbor = (rank - 1 >= 0) ? rank - 1 : nprocs - 1;
+  downneighbor = (rank + 1) % nprocs;
 
-/*
-  for(i = 0; i < k; ++i)
-    subset_w[i] = 0.0;
-  for(i = k*(kperproc+1); i < k*(kperproc+1) + k; ++i)
-    subset_w[i] = 0.0;
-*/
+  if(nprocs > 1){
 
-if(DEBUG) printf("-scattering\n");
-  // subset_w offset by k to give space for neighbor ghost cells
-  MPI_Scatter(w, nperproc, MPI_DOUBLE, subset_w+k, nperproc, MPI_DOUBLE,
-    0, MPI_COMM_WORLD);
-
-if(DEBUG) printf("-initing ghost cells\n");
-  // get ghost cells
-  if(rank % 2 == 0) // even processors send up then recv from up neighbor
-  {
-    MPI_Send(subset_w+k, k, MPI_DOUBLE, rank-1, 1, MPI_COMM_WORLD);
-    MPI_Recv(subset_w, k, MPI_DOUBLE, rank-1, 2, MPI_COMM_WORLD, &status);
-  }
-  else              // odd processors recv from then send to down neighbor
-  {
-    MPI_Recv(subset_w+(k*(kperproc+1)), k, MPI_DOUBLE, rank+1, 1, 
-      MPI_COMM_WORLD, &status);
-    MPI_Send(subset_w+(k*kperproc), k, MPI_DOUBLE, rank+1, 2,
-      MPI_COMM_WORLD);
-  }
-
-  if(rank % 2 == 0) // even proc send to then recv from down neighbor
-  {
-    MPI_Send(subset_w+(k*kperproc), k, MPI_DOUBLE, rank+1, 3, 
-      MPI_COMM_WORLD);
-    MPI_Recv(subset_w+(k*(kperproc+1)), k, MPI_DOUBLE, rank+1, 4, 
-      MPI_COMM_WORLD, &status);
-  }
-  else              // odd proc recv from then send to up neighbor
-  {
-    MPI_Recv(subset_w, k, MPI_DOUBLE, rank-1, 3, MPI_COMM_WORLD, &status);
-    MPI_Send(subset_w+k, k, MPI_DOUBLE, rank-1, 4, MPI_COMM_WORLD);
+    // even send/recv up, odd recv/send down
+    if(rank % 2 == 0) // even
+      {
+        // send first row of real data (+ k)
+        MPI_Send(subset_w + k, k, MPI_DOUBLE, upneighbor, 1, MPI_COMM_WORLD);
+        // recv first row of ghost data (+ 0)
+        MPI_Recv(subset_w, k, MPI_DOUBLE, upneighbor, 2, MPI_COMM_WORLD,
+           &status);
+      }
+    else  // odd
+      {
+        // recv last row of ghost data (+ cellsperproc + k)
+        MPI_Recv(subset_w + (cellsperproc + k), k, MPI_DOUBLE, downneighbor,
+           1, MPI_COMM_WORLD, &status);
+        // send last row of real data (+ cellsperproc)
+        MPI_Send(subset_w + cellsperproc, k, MPI_DOUBLE, downneighbor, 2,
+           MPI_COMM_WORLD);
+      }
+    
+    // even send/recv down, odd recv/send up
+    if(rank % 2 == 0) // even
+      {
+        // send last row of real data (+ cellsperproc)
+        MPI_Send(subset_w + cellsperproc, k, MPI_DOUBLE, downneighbor, 3,
+           MPI_COMM_WORLD);
+        // recv last row of ghost data (+ cellsperproc + k)
+        MPI_Recv(subset_w + (cellsperproc + k), k, MPI_DOUBLE, downneighbor,
+           4, MPI_COMM_WORLD, &status);
+      }
+    else  // odd
+      {
+        // recv first row of ghost data (+ 0)
+        MPI_Recv(subset_w, k, MPI_DOUBLE, upneighbor, 3, MPI_COMM_WORLD,
+           &status);
+        // send first row of real data (+ k)
+        MPI_Send(subset_w + k, k, MPI_DOUBLE, upneighbor, 4, MPI_COMM_WORLD);
+      }
   }
 
-if(DEBUG) printf("-matvec looping\n");
-  for(r = 1; r < kperproc + 1; ++r)
+  // init rows we plan to use
+  //for(i = k; i < k + cellsperproc; ++i)
+  for(i = 0; i < cellsperproc + 2*k; ++i)
   {
-    for(s = 0; s < k; ++s)
+    subset_v[i] = 0.0;
+  }
+
+  for(r = 1; r < rowsperproc + 1; ++r)  // +1 to offset leading ghost row
+  {
+    for(s = 0; s < k; ++ s)
     {
       i = (r * k) + s;
+
       subset_v[i] = 4 * subset_w[i];
 
-      if(r != 0)
+      if(rank != 0 || r != 1)  // account for offset of ghost row
         subset_v[i] -= subset_w[i-k];
       if(s != 0)
         subset_v[i] -= subset_w[i-1];
       if(s != k-1)
         subset_v[i] -= subset_w[i+1];
-      if(r != k-1)
+      if(rank != nprocs - 1 || r != rowsperproc)  // account for offset of ghost row
         subset_v[i] -= subset_w[i+k];
     }
   }
-if(DEBUG) printf("-gather\n");
-  MPI_Gather(subset_v+k, nperproc, MPI_DOUBLE, v, nperproc, MPI_DOUBLE, 0,
-    MPI_COMM_WORLD);
 
+  // retrieve local subsets of vector from all nodes
+  if(rank == 0)
+  {
+    MPI_Gather(subset_v + k, cellsperproc, MPI_DOUBLE, v, cellsperproc, MPI_DOUBLE,
+      0, MPI_COMM_WORLD);
+  }
+  else
+  {
+    MPI_Gather(subset_v + k, cellsperproc, MPI_DOUBLE, NULL, cellsperproc,
+      MPI_DOUBLE, 0, MPI_COMM_WORLD);
+  }
+#else // serial implementation
+  for(i = 0; i < n; ++i)
+  {
+    v[i] = 0.0;
+  }
+
+  for(r = 0; r < k; ++r)
+  {
+    for(s = 0; s < k; ++s)
+    {
+      i = (r * k) + s;
+      v[i] = 4 * w[i];
+
+      if(r != 0)
+        v[i] -= w[i-k];
+      if(s != 0)
+        v[i] -= w[i-1];
+      if(s != k-1)
+        v[i] -= w[i+1];
+      if(r != k-1)
+        v[i] -= w[i+k];
+    }
+  }
+#endif
 }
 
 

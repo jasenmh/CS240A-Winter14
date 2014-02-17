@@ -8,9 +8,9 @@
 int numvertsingraph;  // need to make this a global variable so reducer identity function can handle varying sized graphs
 
 void calculate_bc(graph *G, int *Srcs, int *S, double *sig,
-  int *d, double *del, int *start, int *end, plist *P, 
-  cilk::reducer_opadd<double> *array_of_reducers, int p, 
-  int *num_traversals)
+  int *d, cilk::reducer_opadd<double> *del, int *start, int *end,
+  plist_parallel *P, cilk::reducer_opadd<double> *array_of_reducers,
+  int p, int *num_traversals)
 {
 	int i, j, k;
   int count;
@@ -52,10 +52,16 @@ void calculate_bc(graph *G, int *Srcs, int *S, double *sig,
 								myCount++;
 								d[w] = d[v] + 1; 
 								sig[w] = sig[v]; 
-								P[w].list[P[w].count++] = v;
+								//P[w].list[P[w].count++] = v;
+								P[w].list[P[w].count.get_value()] += (v +
+                  (P[w].list[P[w].count.get_value()] * -1));
+                P[w].count++;
 							} else if (d[w] == d[v] + 1) {
 								sig[w] += sig[v]; 
-								P[w].list[P[w].count++] = v;
+								//P[w].list[P[w].count++] = v;
+								P[w].list[P[w].count.get_value()] += (v +
+                  (P[w].list[P[w].count.get_value()] * -1));
+                P[w].count++;
 							}
 						
 						}
@@ -76,13 +82,13 @@ void calculate_bc(graph *G, int *Srcs, int *S, double *sig,
 		while (phase_num > 0) {
 			for (j=start[phase_num]; j<end[phase_num]; j++) {
 				w = S[j];
-				for (k = 0; k < P[w].count; k++) {
-					v = P[w].list[k];
-					del[v] = del[v] + sig[v]*(1+del[w])/sig[w];
+				for (k = 0; k < P[w].count.get_value(); k++) {
+					v = P[w].list[k].get_value();
+					del[v] += sig[v]*(1+del[w].get_value())/sig[w];
 				}
         // replace this BC with our reducer
 				//BC[w] += del[w];
-        array_of_reducers[w] += del[w];
+        array_of_reducers[w] += del[w].get_value();
 
 // if(DEBUG) printf("- updating centrality in reducer\n");
 // 				BC_centrality_update(&REDUCER_VIEW(my_bcr), w, del[w]);
@@ -94,8 +100,8 @@ void calculate_bc(graph *G, int *Srcs, int *S, double *sig,
 		for (j=0; j<count; j++) {
 			w = S[j];
 			d[w] = -1;
-			del[w] = 0;
-			P[w].count = 0;
+			del[w] += (-1 * del[w].get_value());
+			P[w].count += (-1 * P[w].count.get_value());
 		}
 }
 

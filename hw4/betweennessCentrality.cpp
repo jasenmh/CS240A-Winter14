@@ -101,10 +101,11 @@ void calculate_bc(graph *G, int *Srcs, int *S, double *sig,
 
 double betweennessCentrality_parallel(graph* G, double* BC) {
   int *S; 	/* stack of vertices in order of distance from s. Also, implicitly, the BFS queue */
-  plist* P;  	/* predecessors of vertex v on shortest paths from s */
+  plist_parallel* P_parallel;  	/* predecessors of vertex v on shortest paths from s -- PARALLEL VERSION*/
   double* sig; 	/* No. of shortest paths */
   int* d; 	/* Length of the shortest path between every pair */
-  double* del; 	/* dependency of vertices */
+  //double* del; 	/* dependency of vertices */
+
   int *in_degree, *numEdges;
   int *pListMem;	
   int* Srcs; 
@@ -116,6 +117,8 @@ double betweennessCentrality_parallel(graph* G, double* BC) {
   int numV, num_traversals, n, m, phase_num;
   int continueforever;
 
+  // replace del with a reducer
+  cilk::reducer_opadd<double> *del; 
   // make an array of reducers, one reducer for each vertex in the graph
   cilk::reducer_opadd<double> *array_of_reducers = new cilk::reducer_opadd<double>[G->nv];
 
@@ -136,7 +139,9 @@ double betweennessCentrality_parallel(graph* G, double* BC) {
 
   /* Initialize predecessor lists */
   /* Number of predecessors of a vertex is at most its in-degree. */
-  P = (plist *) calloc(n, sizeof(plist));
+  P_parallel = (plist_parallel *) calloc(n, sizeof(plist_parallel));
+  P_parallel->list = new cilk::reducer_opadd<int>[n];
+
   in_degree = (int *) calloc(n+1, sizeof(int));
   numEdges = (int *) malloc((n+1)*sizeof(int));
   for (i=0; i<m; i++) {
@@ -146,9 +151,11 @@ double betweennessCentrality_parallel(graph* G, double* BC) {
   prefix_sums(in_degree, numEdges, n);
   pListMem = (int *) malloc(m*sizeof(int));
   for (i=0; i<n; i++) {
-    P[i].list = pListMem + numEdges[i];
-    P[i].degree = in_degree[i];
-    P[i].count = 0;
+    // to assign values to the reducers, we have to use the += operator 
+    // with a negative value of the thing which we are assigning
+    P_parallel[i]->list += -(P_parallel[i]->list) + (pListMem + numEdges[i]);
+    P_parallel[i]->degree += in_degree[i];
+    P_parallel[i]->count += 0;
   }
   free(in_degree);
   free(numEdges);
@@ -157,7 +164,8 @@ double betweennessCentrality_parallel(graph* G, double* BC) {
   S   = (int *) malloc(n*sizeof(int));
   sig = (double *) malloc(n*sizeof(double));
   d   = (int *) malloc(n*sizeof(int));
-  del = (double *) calloc(n, sizeof(double));
+  //del = (double *) calloc(n, sizeof(double));
+  del = new cilk::reducer_opadd<double>[n];
 	
   start = (int *) malloc(n*sizeof(int));
   end = (int *) malloc(n*sizeof(int));
@@ -177,7 +185,7 @@ double betweennessCentrality_parallel(graph* G, double* BC) {
   //for (p=0; p<n; p++) {
   cilk_for(int p = 0; p < n; ++p)
   {
-    calculate_bc(G, Srcs, S, sig, d, del, start, end, P, 
+    calculate_bc(G, Srcs, S, sig, d, del, start, end, P_parallel, 
       array_of_reducers, p, &num_traversals);
   }
 
@@ -199,7 +207,8 @@ if(DEBUG) printf("- exporting betweennessess\n");
 
   free(S);
   free(pListMem);
-  free(P);
+  free(P_parallel->list);
+  free(P_parallel);
   free(sig);
   free(d);
   free(del);
@@ -218,7 +227,7 @@ if(DEBUG) printf("- exporting betweennessess\n");
  */
 double betweennessCentrality_serial(graph* G, double* BC) {
   int *S; 	/* stack of vertices in order of distance from s. Also, implicitly, the BFS queue */
-  plist* P;  	/* predecessors of vertex v on shortest paths from s */
+  plist_parallel* P;  	/* predecessors of vertex v on shortest paths from s */
   double* sig; 	/* No. of shortest paths */
   int* d; 	/* Length of the shortest path between every pair */
   double* del; 	/* dependency of vertices */

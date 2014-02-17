@@ -54,13 +54,13 @@ void calculate_bc(graph *G, int *Srcs, int *S, double *sig,
 								sig[w] = sig[v]; 
 								//P[w].list[P[w].count++] = v;
 								P[w].list[P[w].count.get_value()] += (v +
-                  (P[w].list[P[w].count.get_value()] * -1));
+                  (P[w].list[P[w].count.get_value()].get_value() * -1));
                 P[w].count++;
 							} else if (d[w] == d[v] + 1) {
 								sig[w] += sig[v]; 
 								//P[w].list[P[w].count++] = v;
 								P[w].list[P[w].count.get_value()] += (v +
-                  (P[w].list[P[w].count.get_value()] * -1));
+                  (P[w].list[P[w].count.get_value()].get_value() * -1));
                 P[w].count++;
 							}
 						
@@ -146,7 +146,10 @@ double betweennessCentrality_parallel(graph* G, double* BC) {
   /* Initialize predecessor lists */
   /* Number of predecessors of a vertex is at most its in-degree. */
   P_parallel = (plist_parallel *) calloc(n, sizeof(plist_parallel));
-  P_parallel->list = new cilk::reducer_opadd<int>[n];
+  for(i = 0; i < n; ++i)
+  {
+    (*P_parallel)[i].list = new cilk::reducer_opadd<int>[n];
+  }
 
   in_degree = (int *) calloc(n+1, sizeof(int));
   numEdges = (int *) malloc((n+1)*sizeof(int));
@@ -159,9 +162,9 @@ double betweennessCentrality_parallel(graph* G, double* BC) {
   for (i=0; i<n; i++) {
     // to assign values to the reducers, we have to use the += operator 
     // with a negative value of the thing which we are assigning
-    P_parallel[i]->list += -(P_parallel[i]->list) + (pListMem + numEdges[i]);
+//    P_parallel[i]->list += -(P_parallel[i]->list) + (pListMem + numEdges[i]);
     P_parallel[i]->degree += in_degree[i];
-    P_parallel[i]->count += 0;
+    P_parallel[i]->count += (-1 * P_parallel[i]->count.get_value());
   }
   free(in_degree);
   free(numEdges);
@@ -233,7 +236,7 @@ if(DEBUG) printf("- exporting betweennessess\n");
  */
 double betweennessCentrality_serial(graph* G, double* BC) {
   int *S; 	/* stack of vertices in order of distance from s. Also, implicitly, the BFS queue */
-  plist_parallel* P;  	/* predecessors of vertex v on shortest paths from s */
+  plist* P;  	/* predecessors of vertex v on shortest paths from s */
   double* sig; 	/* No. of shortest paths */
   int* d; 	/* Length of the shortest path between every pair */
   double* del; 	/* dependency of vertices */

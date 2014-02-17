@@ -7,6 +7,8 @@
 #include <string.h>
 #include <math.h>
 #include <sys/time.h>
+#include <cilk/cilk.h>
+#include <cilk/reducer_opadd.h>
 
 #define FALSE 0
 #define TRUE 1
@@ -29,6 +31,13 @@ typedef struct
     int count;
     int degree;
 } plist;
+
+typedef struct
+{
+  int start;
+  cilk::reducer_opadd<int> count;
+  int degree;
+} plist_parallel;
 
 /* Function declarations */
 double betweennessCentrality_parallel(graph*, double*);

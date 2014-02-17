@@ -3,85 +3,14 @@
 #include <cilk/reducer_opadd.h>
 
 #define MAX_THREADS 320
-#define DEBUG 0
-
-int numvertsingraph;  // need to make this a global variable so reducer identity function can handle varying sized graphs
-
-// typedef struct BC_reducer {
-//   double *betweenness;
-// } BCR;
-
-// void BC_initialize(BCR *bc)
-// {
-//   int i;
-
-//   bc->betweenness = (double *)malloc(numvertsingraph * sizeof(double));
-//   for(i = 0; i < numvertsingraph; ++i)
-//   {
-//     bc->betweenness[i] = 0.0;
-//   }
-// }
-
-// void BC_cleanup(BCR *bc)
-// {
-//   if(bc == NULL)
-//     return;
-
-//   if(bc->betweenness != NULL)
-//     free(bc->betweenness);
-
-//   free(bc);
-// }
-
-// void BC_combine(BCR *left, BCR *right)
-// {
-//   int i;
-
-//   for(i = 0; i < numvertsingraph; ++i)
-//   {
-//     left->betweenness[i] += right->betweenness[i];
-//   }
-
-//   BC_cleanup(right);
-// }
-
-// void BC_centrality_update(BCR *bcr, int node, double cu)
-// {
-//   bcr->betweenness[node] += cu;
-// }
-
-// void BC_export_betweennessess(BCR *bcr, double *bc)
-// {
-//   int i;
-
-//   for(i = 0; i < numvertsingraph; ++i)
-//   {
-//     bc[i] = bcr->betweenness[i];
-//   }
-
-// }
-
-// void identity_wrapper(void *reducer, void *bcr)
-// {
-//   BC_initialize((BCR *)bcr);
-// }
-
-// void reducer_wrapper(void *reducer, void *left, void *right)
-// {
-//   BC_combine((BCR *)left, (BCR *)right);
-// }
-
-// void destroy_wrapper(void *reducer, void *p)
-// {
-//   BC_cleanup((BCR *)p);
-// }
+#define DEBUG 1
 
 double betweennessCentrality_parallel(graph* G, double* BC) {
   int *S; 	/* stack of vertices in order of distance from s. Also, implicitly, the BFS queue */
   plist* P;  	/* predecessors of vertex v on shortest paths from s */
-  double* sig; 	/* No. of shortest paths */
+  //double* sig; 	/* No. of shortest paths */
   int* d; 	/* Length of the shortest path between every pair */
-  double* del; 	/* dependency of vertices */
+  //double* del; 	/* dependency of vertices */
   int *in_degree, *numEdges;
   int *pListMem;	
   int* Srcs; 
@@ -91,21 +20,11 @@ double betweennessCentrality_parallel(graph* G, double* BC) {
   int i, j, k, count, myCount;
   int v, w, vert;
   int numV, num_traversals, n, m, phase_num;
-  int continueforever;
 
   // make an array of reducers, one reducer for each vertex in the graph
-  cilk::reducer_opadd<double> *array_of_reducers = new cilk::reducer_opadd<double>[G->nv];
-
-  // create and initialize our custom reducer
-//if(DEBUG) printf("- creating and initializing reducer\n");
-  // CILK_C_DECLARE_REDUCER(BCR) my_bcr =
-  //   CILK_C_INIT_REDUCER(BCR,
-  //     reducer_wrapper,
-  //     identity_wrapper,
-  //     destroy_wrapper);
-  // numvertsingraph = G->nv;
-  // BC_initialize(&REDUCER_VIEW(my_bcr));
-
+  cilk::reducer_opadd<double> *BC_reducers = new cilk::reducer_opadd<double>[G->nv];
+  cilk::reducer_opadd<double> *del_reducers = new cilk::reducer_opadd<double>[G->nv];
+  cilk::reducer_opadd<double> *sig_reducers = new cilk::reducer_opadd<double>[G->nv];
   /* numV: no. of vertices to run BFS from = 2^K4approx */
   //numV = 1<<K4approx;
   n = G->nv;
@@ -142,9 +61,9 @@ double betweennessCentrality_parallel(graph* G, double* BC) {
 	
   /* Allocate shared memory */ 
   S   = (int *) malloc(n*sizeof(int));
-  sig = (double *) malloc(n*sizeof(double));
+  //sig = (double *) malloc(n*sizeof(double));
   d   = (int *) malloc(n*sizeof(int));
-  del = (double *) calloc(n, sizeof(double));
+  //del = (double *) calloc(n, sizeof(double));
 	
   start = (int *) malloc(n*sizeof(int));
   end = (int *) malloc(n*sizeof(int));
@@ -159,12 +78,6 @@ double betweennessCentrality_parallel(graph* G, double* BC) {
   /***********************************/
   /*** MAIN LOOP *********************/
   /***********************************/
-
-  // register our custom reducer
-if(DEBUG) printf("- registering reducer\n");
-//  CILK_C_REGISTER_REDUCER(my_bcr);
-
-  //continueforever = 0;
 
   // cilk_for this for loop
   //for (p=0; p<n; p++) {
@@ -186,7 +99,8 @@ if(DEBUG) printf("- registering reducer\n");
   //     continue;
 		// }
 		
-		sig[i] = 1;
+		//sig[i] = 1;
+		sig_reducers[i] += 1 + (-1 * sig_reducers[i].get_value());
 		d[i] = 0;
 		S[0] = i;
 		start[0] = 0;
@@ -212,10 +126,11 @@ if(DEBUG) printf("- registering reducer\n");
 								S[end[phase_num] + myCount] = w;
 								myCount++;
 								d[w] = d[v] + 1; 
-								sig[w] = sig[v]; 
+								sig_reducers[w] += sig_reducers[v].get_value() + 
+                  (-1 * sig_reducers[w].get_value()); 
 								P[w].list[P[w].count++] = v;
 							} else if (d[w] == d[v] + 1) {
-								sig[w] += sig[v]; 
+								sig_reducers[w] += sig_reducers[v].get_value(); 
 								P[w].list[P[w].count++] = v;
 							}
 						
@@ -239,14 +154,14 @@ if(DEBUG) printf("- registering reducer\n");
 				w = S[j];
 				for (k = 0; k < P[w].count; k++) {
 					v = P[w].list[k];
-					del[v] = del[v] + sig[v]*(1+del[w])/sig[w];
+					//del[v] = del[v] + sig[v]*(1+del[w])/sig[w];
+					del_reducers[v] += sig_reducers[v].get_value()
+            * (1 + del_reducers[w].get_value()) / sig_reducers[w].get_value();
 				}
         // replace this BC with our reducer
 				//BC[w] += del[w];
-        array_of_reducers[w] += del[w];
+        BC_reducers[w] += del_reducers[w].get_value();
 
-// if(DEBUG) printf("- updating centrality in reducer\n");
-// 				BC_centrality_update(&REDUCER_VIEW(my_bcr), w, del[w]);
 			}
 
 			phase_num--;
@@ -255,7 +170,8 @@ if(DEBUG) printf("- registering reducer\n");
 		for (j=0; j<count; j++) {
 			w = S[j];
 			d[w] = -1;
-			del[w] = 0;
+			//del[w] = 0;
+			del_reducers[w] += (del_reducers[w].get_value() * -1);
 			P[w].count = 0;
 		}
   }
@@ -264,24 +180,23 @@ if(DEBUG) printf("- registering reducer\n");
   /*** END OF MAIN LOOP **************/
   /***********************************/
 
-  // unregister reducer
-// if(DEBUG) printf("- unregistering reducer\n");
-//   CILK_C_UNREGISTER_REDUCER(my_bcr);
 
   // copy the values from our reducer into BC
-if(DEBUG) printf("- exporting betweennessess\n");
   for (int i = 0; i < n; ++i)
   {
-    BC[i] = array_of_reducers[i].get_value();
+    BC[i] = BC_reducers[i].get_value();
   }
-// 	BC_export_betweennessess(&REDUCER_VIEW(my_bcr), BC);
 
   free(S);
   free(pListMem);
   free(P);
-  free(sig);
+  //free(sig);
+  //delete[] sig_reducers;
+  free(sig_reducers);
   free(d);
-  free(del);
+  //free(del);
+  delete[] del_reducers;
+  delete[] BC_reducers;
   free(start);
   free(end);
   elapsed_time = get_seconds() - elapsed_time;
